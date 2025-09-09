@@ -1,6 +1,13 @@
 [package]
-name = "pulsar"
+name = "quasar"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
+uuid = { version = "1.17.0", features = ["v4"] }
+
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"
