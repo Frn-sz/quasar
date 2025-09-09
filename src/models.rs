@@ -12,7 +12,7 @@ pub enum Key {
 /// Account is very simplified, since we don't really care about user data
 #[derive(Default, Debug, Clone)]
 pub struct Account {
-    pub uuid: uuid::Uuid,
+    pub uuid: Uuid,
     // TODO: Implement a module to deal with integer
     pub balance: i64,
     pub keys: Vec<Key>,
