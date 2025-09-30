@@ -1,5 +1,7 @@
-use chrono::{DateTime, Utc};
-use uuid::Uuid;
+use {
+    chrono::{DateTime, Utc},
+    uuid::Uuid,
+};
 
 /// Represents a possible identifier for an account.
 #[derive(Debug, Clone)]

@@ -6,16 +6,4 @@ pub trait TransactionProcessorInterface {
         &mut self,
         transaction: crate::models::Transaction,
     ) -> Result<(), TransactionProcessorError>;
-
-    /// Validates a transaction before processing.
-    fn validate_transaction(
-        &self,
-        transaction: &crate::models::Transaction,
-    ) -> Result<(), TransactionProcessorError>;
-
-    /// Simulates a transaction without committing it to the ledger.
-    fn simulate_transaction(
-        &self,
-        transaction: &crate::models::Transaction,
-    ) -> Result<(), TransactionProcessorError>;
 }
