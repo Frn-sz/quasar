@@ -124,7 +124,7 @@ mod tests {
             id: Uuid::new_v4(),
             source_account_id: source_id,
             destination_account_id: dest_id,
-            amount: 2000, // Mais do que o saldo
+            amount: 2000, // More than the balance
             timestamp: Utc::now(),
             status: TransactionStatus::Pending,
         };
