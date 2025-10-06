@@ -96,7 +96,7 @@ mod tests {
     use crate::ledger::Ledger;
     use crate::models::{CreateAccountInstruction, Key, TransactionStatus};
 
-    // Helper para configurar o ambiente de teste com contas existentes
+    // Helper to set up test environment with existing accounts
     fn setup_for_transfer() -> (TransactionProcessor, Arc<RwLock<Ledger>>, Uuid, Uuid) {
         let ledger = Arc::new(RwLock::new(Ledger::new()));
         let processor = TransactionProcessor::new(ledger.clone());
