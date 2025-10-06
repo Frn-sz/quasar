@@ -115,7 +115,7 @@ mod tests {
             amount: 0,
         };
 
-        // Commit inicial para acertar o saldo
+        // Initial commit to set the balance
         ledger_lock
             .commit_transfer(
                 Uuid::new_v4(),
