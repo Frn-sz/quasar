@@ -87,11 +87,6 @@ impl LedgerInterface for Ledger {
         let mut accounts = self.acquire_accounts_write_lock()?;
         let mut processed_transactions = self.acquire_transactions_write_lock()?;
 
-        // Safeguard check, although the processor should handle this.
-        if processed_transactions.contains(&transaction_id) {
-            return Err(LedgerError::TransactionAlreadyProcessed);
-        }
-
         // Add instruction to history
         let timestamp = Utc::now();
         source_account.transaction_history.push(HistoricTransfer {
