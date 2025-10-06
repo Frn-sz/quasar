@@ -1,26 +1,30 @@
 use {
     crate::{
         ledger::error::LedgerError,
-        models::{Account, Transaction},
+        models::{Account, Key, TransferInstruction},
     },
     uuid::Uuid,
 };
 
 pub trait LedgerInterface {
-    /// Creates a new account and returns its UUID.
-    fn create_account(&mut self) -> Result<Uuid, LedgerError>;
+    /// Creates a new account with the given keys and returns its UUID.
+    fn create_account(&mut self, keys: Vec<Key>) -> Result<Uuid, LedgerError>;
 
-    /// Retrieves an account by its UUID.
-    fn get_account(&self, id: uuid::Uuid) -> Result<crate::models::Account, LedgerError>;
+    /// Gets a clone of an account by its UUID.
+    fn get_account(&self, id: Uuid) -> Result<Account, LedgerError>;
 
-    /// Commits account updates to the ledger.
-    fn commit_updates(
+    /// Atomically commits the state changes for a transfer instruction.
+    fn commit_transfer(
         &mut self,
-        transaction: &Transaction,
+        transaction_id: Uuid,
+        instruction: &TransferInstruction,
         source_account: &mut Account,
         dest_account: &mut Account,
     ) -> Result<(), LedgerError>;
 
-    /// Checks if a transaction has been processed.
+    /// Checks if a transaction ID has already been processed.
     fn is_transaction_processed(&self, transaction_id: Uuid) -> Result<bool, LedgerError>;
+
+    /// Marks a transaction ID as processed.
+    fn mark_transaction_processed(&mut self, transaction_id: Uuid) -> Result<(), LedgerError>;
 }

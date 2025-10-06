@@ -12,4 +12,6 @@ pub enum LedgerError {
     FailedToAcquireTransactionsReadLock,
     #[error("Account not found")]
     AccountNotFound,
+    #[error("Transaction has already been processed")]
+    TransactionAlreadyProcessed,
 }
