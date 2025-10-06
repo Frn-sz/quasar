@@ -20,13 +20,36 @@ pub enum TransactionStatus {
 }
 
 #[derive(Debug, Clone)]
+pub enum InstructionType {
+    Transfer(TransferInstruction),
+    CreateAccount(CreateAccountInstruction),
+}
+#[derive(Debug, Clone)]
 pub struct Transaction {
     pub id: Uuid,
+    pub instruction_type: InstructionType,
+    pub status: TransactionStatus,
+    pub timestamp: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TransferInstruction {
     pub source_account_id: Uuid,
     pub destination_account_id: Uuid,
     pub amount: u64,
+}
+
+#[derive(Debug, Clone)]
+pub struct CreateAccountInstruction {
+    pub id: Uuid,
+    pub keys: Vec<Key>,
+}
+
+#[derive(Debug, Clone)]
+pub struct HistoricTransfer {
+    pub transaction_id: Uuid,
+    pub instruction: TransferInstruction,
     pub timestamp: DateTime<Utc>,
-    pub status: TransactionStatus,
 }
 
 /// Account is very simplified, since we don't really care about user data
@@ -37,7 +60,7 @@ pub struct Account {
     pub keys: Vec<Key>,
     // For now using this naive approach; must be optimized later.
     // This leads to data duplication and bad CPU cache locality.
-    pub transaction_history: Vec<Transaction>,
+    pub transaction_history: Vec<HistoricTransfer>,
 }
 
 impl Account {

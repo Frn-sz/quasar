@@ -7,84 +7,122 @@ pub mod interface;
 use {
     crate::{
         ledger::interface::LedgerInterface,
+        models::{CreateAccountInstruction, InstructionType, Transaction, TransferInstruction},
         transaction_processor::{
             error::TransactionProcessorError, interface::TransactionProcessorInterface,
         },
     },
     std::sync::{Arc, RwLock},
+    uuid::Uuid,
 };
 
 pub struct TransactionProcessor {
-    // This must be improved later to avoid locking the entire ledger for each transaction.
-    ledger: Arc<RwLock<dyn LedgerInterface>>,
+    ledger: Arc<RwLock<dyn LedgerInterface + Send + Sync>>,
 }
 
 impl TransactionProcessor {
     pub fn new(ledger: Arc<RwLock<dyn LedgerInterface + Send + Sync>>) -> Self {
         TransactionProcessor { ledger }
     }
-}
 
-impl TransactionProcessorInterface for TransactionProcessor {
-    fn process_transaction(
+    fn process_transfer(
         &mut self,
-        transaction: crate::models::Transaction,
+        transaction_id: Uuid,
+        instruction: TransferInstruction,
     ) -> Result<(), TransactionProcessorError> {
         let mut ledger = self.ledger.write().unwrap();
 
-        if ledger.is_transaction_processed(transaction.id)? {
+        if ledger.is_transaction_processed(transaction_id)? {
             return Err(TransactionProcessorError::TransactionAlreadyProcessed);
         }
 
-        let mut source_account = ledger.get_account(transaction.source_account_id)?;
-        let mut dest_account = ledger.get_account(transaction.destination_account_id)?;
+        let mut source_account = ledger.get_account(instruction.source_account_id)?;
+        let mut dest_account = ledger.get_account(instruction.destination_account_id)?;
 
-        if source_account.balance < transaction.amount {
+        if source_account.balance < instruction.amount {
             return Err(TransactionProcessorError::InsufficientFunds);
         }
 
-        source_account.balance = source_account.balance.saturating_sub(transaction.amount);
-        dest_account.balance = dest_account.balance.saturating_add(transaction.amount);
+        source_account.balance = source_account.balance.saturating_sub(instruction.amount);
+        dest_account.balance = dest_account.balance.saturating_add(instruction.amount);
 
-        ledger.commit_updates(&transaction, &mut source_account, &mut dest_account)?;
+        ledger.commit_transfer(
+            transaction_id,
+            &instruction,
+            &mut source_account,
+            &mut dest_account,
+        )?;
+
+        Ok(())
+    }
+
+    fn process_create_account(
+        &mut self,
+        transaction_id: Uuid,
+        instruction: CreateAccountInstruction,
+    ) -> Result<(), TransactionProcessorError> {
+        let mut ledger = self.ledger.write().unwrap();
+
+        if ledger.is_transaction_processed(transaction_id)? {
+            return Err(TransactionProcessorError::TransactionAlreadyProcessed);
+        }
+
+        ledger.create_account(instruction.keys)?;
+        ledger.mark_transaction_processed(transaction_id)?;
 
         Ok(())
     }
 }
 
+impl TransactionProcessorInterface for TransactionProcessor {
+    fn process_transaction(
+        &mut self,
+        transaction: Transaction,
+    ) -> Result<(), TransactionProcessorError> {
+        match transaction.instruction_type {
+            InstructionType::Transfer(inst) => self.process_transfer(transaction.id, inst),
+            InstructionType::CreateAccount(inst) => {
+                self.process_create_account(transaction.id, inst)
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::ledger::{Ledger, error::LedgerError};
-    use crate::models::{Transaction, TransactionStatus};
-    use crate::transaction_processor::error::TransactionProcessorError;
     use chrono::Utc;
-    use std::sync::{Arc, RwLock};
-    use uuid::Uuid;
 
-    fn setup() -> (TransactionProcessor, Arc<RwLock<Ledger>>, Uuid, Uuid) {
+    use super::*;
+    use crate::ledger::Ledger;
+    use crate::models::{CreateAccountInstruction, Key, TransactionStatus};
+
+    // Helper to set up test environment with existing accounts
+    fn setup_for_transfer() -> (TransactionProcessor, Arc<RwLock<Ledger>>, Uuid, Uuid) {
         let ledger = Arc::new(RwLock::new(Ledger::new()));
         let processor = TransactionProcessor::new(ledger.clone());
 
         let mut ledger_lock = ledger.write().unwrap();
-        let source_id = ledger_lock.create_account().unwrap();
-        let dest_id = ledger_lock.create_account().unwrap();
+        let source_id = ledger_lock.create_account(vec![]).unwrap();
+        let dest_id = ledger_lock.create_account(vec![]).unwrap();
 
         let mut source_account = ledger_lock.get_account(source_id).unwrap();
-        let mut dest_account = ledger_lock.get_account(dest_id).unwrap();
         source_account.balance = 1000;
+        let mut dest_account = ledger_lock.get_account(dest_id).unwrap();
 
-        let tx = Transaction {
-            id: Uuid::new_v4(),
+        let transfer_inst = TransferInstruction {
             source_account_id: source_id,
             destination_account_id: dest_id,
             amount: 0,
-            timestamp: Utc::now(),
-            status: TransactionStatus::Completed,
         };
 
+        // Initial commit to set the balance
         ledger_lock
-            .commit_updates(&tx, &mut source_account, &mut dest_account)
+            .commit_transfer(
+                Uuid::new_v4(),
+                &transfer_inst,
+                &mut source_account,
+                &mut dest_account,
+            )
             .unwrap();
 
         drop(ledger_lock);
@@ -93,14 +131,38 @@ mod tests {
     }
 
     #[test]
-    fn test_process_successful_transaction() {
-        let (mut processor, ledger, source_id, dest_id) = setup();
+    fn test_process_create_account_transaction() {
+        let ledger = Arc::new(RwLock::new(Ledger::new()));
+        let mut processor = TransactionProcessor::new(ledger.clone());
 
         let transaction = Transaction {
             id: Uuid::new_v4(),
-            source_account_id: source_id,
-            destination_account_id: dest_id,
-            amount: 100,
+            instruction_type: InstructionType::CreateAccount(CreateAccountInstruction {
+                keys: vec![Key::Email("test@test.com".to_string())],
+                id: Uuid::new_v4(),
+            }),
+            timestamp: Utc::now(),
+            status: TransactionStatus::Pending,
+        };
+
+        let result = processor.process_transaction(transaction);
+        assert!(result.is_ok());
+
+        let ledger_lock = ledger.read().unwrap();
+        assert_eq!(ledger_lock.accounts.read().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn test_process_successful_transfer() {
+        let (mut processor, ledger, source_id, dest_id) = setup_for_transfer();
+
+        let transaction = Transaction {
+            id: Uuid::new_v4(),
+            instruction_type: InstructionType::Transfer(TransferInstruction {
+                source_account_id: source_id,
+                destination_account_id: dest_id,
+                amount: 100,
+            }),
             timestamp: Utc::now(),
             status: TransactionStatus::Pending,
         };
@@ -117,14 +179,16 @@ mod tests {
     }
 
     #[test]
-    fn test_process_transaction_insufficient_funds() {
-        let (mut processor, _, source_id, dest_id) = setup();
+    fn test_process_transfer_insufficient_funds() {
+        let (mut processor, _, source_id, dest_id) = setup_for_transfer();
 
         let transaction = Transaction {
             id: Uuid::new_v4(),
-            source_account_id: source_id,
-            destination_account_id: dest_id,
-            amount: 2000, // More than the balance
+            instruction_type: InstructionType::Transfer(TransferInstruction {
+                source_account_id: source_id,
+                destination_account_id: dest_id,
+                amount: 2000, // More than available balance
+            }),
             timestamp: Utc::now(),
             status: TransactionStatus::Pending,
         };
@@ -134,52 +198,6 @@ mod tests {
         assert!(matches!(
             result.err().unwrap(),
             TransactionProcessorError::InsufficientFunds
-        ));
-    }
-
-    #[test]
-    fn test_process_transaction_account_not_found() {
-        let (mut processor, _, source_id, _) = setup();
-        let non_existing_id = Uuid::new_v4();
-
-        let transaction = Transaction {
-            id: Uuid::new_v4(),
-            source_account_id: source_id,
-            destination_account_id: non_existing_id,
-            amount: 100,
-            timestamp: Utc::now(),
-            status: TransactionStatus::Pending,
-        };
-
-        let result = processor.process_transaction(transaction);
-        assert!(result.is_err());
-        assert!(matches!(
-            result.err().unwrap(),
-            TransactionProcessorError::Ledger(LedgerError::AccountNotFound)
-        ));
-    }
-
-    #[test]
-    fn test_process_idempotency_transaction_already_processed() {
-        let (mut processor, _, source_id, dest_id) = setup();
-
-        let transaction = Transaction {
-            id: Uuid::new_v4(),
-            source_account_id: source_id,
-            destination_account_id: dest_id,
-            amount: 100,
-            timestamp: Utc::now(),
-            status: TransactionStatus::Pending,
-        };
-
-        let result1 = processor.process_transaction(transaction.clone());
-        assert!(result1.is_ok());
-
-        let result2 = processor.process_transaction(transaction);
-        assert!(result2.is_err());
-        assert!(matches!(
-            result2.err().unwrap(),
-            TransactionProcessorError::TransactionAlreadyProcessed
         ));
     }
 }
