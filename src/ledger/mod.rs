@@ -93,16 +93,17 @@ impl LedgerInterface for Ledger {
         }
 
         // Add instruction to history
+        let timestamp = Utc::now();
         source_account.transaction_history.push(HistoricTransfer {
             transaction_id,
             instruction: instruction.clone(),
-            timestamp: Utc::now(),
+            timestamp,
         });
 
         dest_account.transaction_history.push(HistoricTransfer {
             transaction_id,
             instruction: instruction.clone(),
-            timestamp: Utc::now(),
+            timestamp,
         });
 
         accounts.insert(source_account.uuid, source_account.clone());
