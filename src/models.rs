@@ -20,14 +20,14 @@ pub enum TransactionStatus {
 }
 
 #[derive(Debug, Clone)]
-pub enum InstructionType {
+pub enum Instruction {
     Transfer(TransferInstruction),
     CreateAccount(CreateAccountInstruction),
 }
 #[derive(Debug, Clone)]
 pub struct Transaction {
     pub id: Uuid,
-    pub instruction_type: InstructionType,
+    pub instruction: Instruction,
     pub status: TransactionStatus,
     pub timestamp: DateTime<Utc>,
 }
@@ -41,14 +41,12 @@ pub struct TransferInstruction {
 
 #[derive(Debug, Clone)]
 pub struct CreateAccountInstruction {
-    pub id: Uuid,
     pub keys: Vec<Key>,
 }
 
 impl CreateAccountInstruction {
     pub fn new(keys: Vec<Key>) -> Self {
-        let id = Uuid::new_v4();
-        CreateAccountInstruction { id, keys }
+        CreateAccountInstruction { keys }
     }
 }
 

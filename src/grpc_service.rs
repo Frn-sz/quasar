@@ -8,7 +8,7 @@ use tracing::{error, info};
 
 use crate::{
     config::GrpcConfig,
-    models::{CreateAccountInstruction, InstructionType, Transaction, TransferInstruction},
+    models::{CreateAccountInstruction, Instruction, Transaction, TransferInstruction},
     transaction_processor::{TransactionProcessor, interface::TransactionProcessorInterface},
 };
 use uuid::Uuid;
@@ -44,14 +44,14 @@ impl QuasarService for GrpcService {
 
         let domain_transaction = Transaction {
             id: transaction_id,
-            instruction_type: match instruction {
+            instruction: match instruction {
                 transaction_request::Instruction::Transfer(t) => {
                     let from = Uuid::parse_str(&t.source_account_id)
                         .map_err(|_| Status::invalid_argument("Invalid source account ID"))?;
                     let to = Uuid::parse_str(&t.destination_account_id)
                         .map_err(|_| Status::invalid_argument("Invalid destination account ID"))?;
 
-                    InstructionType::Transfer(TransferInstruction {
+                    Instruction::Transfer(TransferInstruction {
                         source_account_id: from,
                         destination_account_id: to,
                         amount: t.amount,
@@ -59,10 +59,7 @@ impl QuasarService for GrpcService {
                 }
                 transaction_request::Instruction::CreateAccount(ca) => {
                     // Keys must be added later; for now, we create an empty account.
-                    InstructionType::CreateAccount(CreateAccountInstruction {
-                        id: todo!(),
-                        keys: vec![],
-                    })
+                    Instruction::CreateAccount(CreateAccountInstruction { keys: vec![] })
                 }
             },
             status: crate::models::TransactionStatus::Pending,
@@ -89,20 +86,26 @@ pub async fn start_grpc_service(
     processor: Arc<RwLock<TransactionProcessor>>,
     mut shutdown_receiver: tokio::sync::broadcast::Receiver<()>,
 ) {
-    info!("Initializing gRPC server at {}", config.address);
+    let address = format!("{}:{}", config.address, config.port);
 
-    let addr = std::net::SocketAddr::V4(
-        SocketAddrV4::from_str(&config.address).expect("Invalid gRPC address"),
-    );
+    let socket_addr = match std::net::SocketAddr::from_str(&address) {
+        Ok(addr) => addr,
+        Err(e) => {
+            error!("Invalid gRPC address: {}: {}", config.address, e);
+            return;
+        }
+    };
 
     let shutdown = async {
         shutdown_receiver.recv().await.ok();
         info!("gRPC server is shutting down...");
     };
 
+    info!("Initializing gRPC server at {}", address);
+
     if let Err(e) = Server::builder()
         .add_service(QuasarServiceServer::new(GrpcService { processor }))
-        .serve_with_shutdown(addr, shutdown)
+        .serve_with_shutdown(socket_addr, shutdown)
         .await
     {
         error!("gRPC server error: {}", e);

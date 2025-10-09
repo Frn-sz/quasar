@@ -7,7 +7,7 @@ pub mod interface;
 use {
     crate::{
         ledger::interface::LedgerInterface,
-        models::{CreateAccountInstruction, InstructionType, Transaction, TransferInstruction},
+        models::{CreateAccountInstruction, Instruction, Transaction, TransferInstruction},
         transaction_processor::{
             error::TransactionProcessorError, interface::TransactionProcessorInterface,
         },
@@ -79,11 +79,9 @@ impl TransactionProcessorInterface for TransactionProcessor {
         &mut self,
         transaction: Transaction,
     ) -> Result<(), TransactionProcessorError> {
-        match transaction.instruction_type {
-            InstructionType::Transfer(inst) => self.process_transfer(transaction.id, inst),
-            InstructionType::CreateAccount(inst) => {
-                self.process_create_account(transaction.id, inst)
-            }
+        match transaction.instruction {
+            Instruction::Transfer(inst) => self.process_transfer(transaction.id, inst),
+            Instruction::CreateAccount(inst) => self.process_create_account(transaction.id, inst),
         }
     }
 }
@@ -137,9 +135,8 @@ mod tests {
 
         let transaction = Transaction {
             id: Uuid::new_v4(),
-            instruction_type: InstructionType::CreateAccount(CreateAccountInstruction {
+            instruction: Instruction::CreateAccount(CreateAccountInstruction {
                 keys: vec![Key::Email("test@test.com".to_string())],
-                id: Uuid::new_v4(),
             }),
             timestamp: Utc::now(),
             status: TransactionStatus::Pending,
@@ -158,7 +155,7 @@ mod tests {
 
         let transaction = Transaction {
             id: Uuid::new_v4(),
-            instruction_type: InstructionType::Transfer(TransferInstruction {
+            instruction: Instruction::Transfer(TransferInstruction {
                 source_account_id: source_id,
                 destination_account_id: dest_id,
                 amount: 100,
@@ -184,7 +181,7 @@ mod tests {
 
         let transaction = Transaction {
             id: Uuid::new_v4(),
-            instruction_type: InstructionType::Transfer(TransferInstruction {
+            instruction: Instruction::Transfer(TransferInstruction {
                 source_account_id: source_id,
                 destination_account_id: dest_id,
                 amount: 2000, // More than available balance

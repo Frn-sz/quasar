@@ -38,7 +38,7 @@ impl Quasar {
         let _logging_guard = init_logging(self.config.debug);
 
         // TODO
-        let http_handle = tokio::spawn(async move { todo!() });
+        // let http_handle = tokio::spawn(async move { todo!() });
 
         {
             let grpc_processor = Arc::clone(&self.transaction_processor);
