@@ -45,6 +45,13 @@ pub struct CreateAccountInstruction {
     pub keys: Vec<Key>,
 }
 
+impl CreateAccountInstruction {
+    pub fn new(keys: Vec<Key>) -> Self {
+        let id = Uuid::new_v4();
+        CreateAccountInstruction { id, keys }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct HistoricTransfer {
     pub transaction_id: Uuid,
