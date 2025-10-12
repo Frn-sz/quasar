@@ -1,12 +1,12 @@
-use std::sync::{Arc, RwLock};
-
-use tokio::signal::ctrl_c;
-use tracing::error;
-
-use crate::{grpc_service::start_grpc_service, logging::init_logging};
+use {
+    crate::{grpc_server::start_grpc_service, logging::init_logging},
+    std::sync::{Arc, RwLock},
+    tokio::signal::ctrl_c,
+    tracing::error,
+};
 
 pub mod config;
-pub mod grpc_service;
+pub mod grpc_server;
 pub mod ledger;
 pub mod logging;
 pub mod models;
@@ -14,11 +14,11 @@ pub mod transaction_processor;
 
 pub struct Quasar {
     pub transaction_processor: Arc<RwLock<transaction_processor::TransactionProcessor>>,
-    pub config: config::QuasarConfig,
+    pub config: config::QuasarServerConfig,
 }
 
 impl Quasar {
-    pub fn new(config: config::QuasarConfig) -> Self {
+    pub fn new(config: config::QuasarServerConfig) -> Self {
         let ledger = Arc::new(RwLock::new(ledger::Ledger::new()));
 
         // Cheap clone of Arc
@@ -37,8 +37,7 @@ impl Quasar {
         let mut services = tokio::task::JoinSet::new();
         let _logging_guard = init_logging(self.config.debug);
 
-        // TODO
-        // let http_handle = tokio::spawn(async move { todo!() });
+        // TODO: add REST API service here
 
         {
             let grpc_processor = Arc::clone(&self.transaction_processor);

@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+package server;
+
+service GrpcService {
+  rpc CreateAccount(CreateAccountRequest) returns (CreateAccountResponse);
+  rpc ProcessTransfer(TransferRequest) returns (GenericResponse);
+  rpc ProcessDeposit(DepositRequest) returns (GenericResponse);
+  rpc GetBalance(GetBalanceRequest) returns (GetBalanceResponse);
+}
+
+message GenericResponse {
+  bool success = 1;
+  string error_message = 2;
+}
+
+message CreateAccountRequest {
+  string transaction_id = 1;
+}
+
+message CreateAccountResponse {
+  bool success = 1;
+  string error_message = 2;
+  string created_account_id = 3; 
+}
+
+message TransferRequest {
+  string transaction_id = 1;
+  string source_account_id = 2; 
+  string destination_account_id = 3; 
+  uint64 amount = 4;
+}
+
+message DepositRequest {
+  string transaction_id = 1;
+  string destination_account_id = 2; 
+  uint64 amount = 3; 
+}
+
+message GetBalanceRequest {
+  string transaction_id = 1;
+  string account_id = 2;
+}
+
+message GetBalanceResponse {
+  bool success = 1;
+  string error_message = 2;
+  uint64 balance = 3; 
+}

@@ -7,9 +7,13 @@ pub mod interface;
 use {
     crate::{
         ledger::interface::LedgerInterface,
-        models::{CreateAccountInstruction, Instruction, Transaction, TransferInstruction},
+        models::{
+            CreateAccountInstruction, DepositInstruction, Instruction, Transaction,
+            TransferInstruction,
+        },
         transaction_processor::{
-            error::TransactionProcessorError, interface::TransactionProcessorInterface,
+            error::TransactionProcessorError,
+            interface::{TransactionProcessorInterface, TransactionResult},
         },
     },
     std::sync::{Arc, RwLock},
@@ -29,7 +33,7 @@ impl TransactionProcessor {
         &mut self,
         transaction_id: Uuid,
         instruction: TransferInstruction,
-    ) -> Result<(), TransactionProcessorError> {
+    ) -> Result<TransactionResult, TransactionProcessorError> {
         let mut ledger = self.ledger.write().unwrap();
 
         if ledger.is_transaction_processed(transaction_id)? {
@@ -37,6 +41,7 @@ impl TransactionProcessor {
         }
 
         let mut source_account = ledger.get_account(instruction.source_account_id)?;
+
         let mut dest_account = ledger.get_account(instruction.destination_account_id)?;
 
         if source_account.balance < instruction.amount {
@@ -53,24 +58,56 @@ impl TransactionProcessor {
             &mut dest_account,
         )?;
 
-        Ok(())
+        Ok(TransactionResult::Success)
     }
 
     fn process_create_account(
         &mut self,
         transaction_id: Uuid,
         instruction: CreateAccountInstruction,
-    ) -> Result<(), TransactionProcessorError> {
+    ) -> Result<TransactionResult, TransactionProcessorError> {
         let mut ledger = self.ledger.write().unwrap();
 
         if ledger.is_transaction_processed(transaction_id)? {
             return Err(TransactionProcessorError::TransactionAlreadyProcessed);
         }
 
-        ledger.create_account(instruction.keys)?;
+        let created_account_id = ledger.create_account(instruction.keys)?;
         ledger.mark_transaction_processed(transaction_id)?;
 
-        Ok(())
+        Ok(TransactionResult::AccountCreated(created_account_id))
+    }
+
+    fn process_deposit(
+        &mut self,
+        transaction_id: Uuid,
+        instruction: DepositInstruction,
+    ) -> Result<TransactionResult, TransactionProcessorError> {
+        let mut ledger = self.ledger.write().unwrap();
+
+        if ledger.is_transaction_processed(transaction_id)? {
+            return Err(TransactionProcessorError::TransactionAlreadyProcessed);
+        }
+
+        ledger.deposit_into_account(instruction.destination_account_id, instruction.amount)?;
+
+        ledger.mark_transaction_processed(transaction_id)?;
+
+        Ok(TransactionResult::Success)
+    }
+
+    fn get_balance(
+        &self,
+        account_id: Uuid,
+    ) -> Result<TransactionResult, TransactionProcessorError> {
+        let ledger = self
+            .ledger
+            .read()
+            .map_err(|_| TransactionProcessorError::FailedToAcquireLedgerLock)?;
+
+        let account = ledger.get_account(account_id)?;
+
+        Ok(TransactionResult::Balance(account.balance))
     }
 }
 
@@ -78,21 +115,30 @@ impl TransactionProcessorInterface for TransactionProcessor {
     fn process_transaction(
         &mut self,
         transaction: Transaction,
-    ) -> Result<(), TransactionProcessorError> {
+    ) -> Result<TransactionResult, TransactionProcessorError> {
         match transaction.instruction {
             Instruction::Transfer(inst) => self.process_transfer(transaction.id, inst),
             Instruction::CreateAccount(inst) => self.process_create_account(transaction.id, inst),
+            Instruction::Deposit(deposit_instruction) => {
+                self.process_deposit(transaction.id, deposit_instruction)
+            }
+            Instruction::GetBalance(get_balance_instruction) => {
+                self.get_balance(get_balance_instruction.account_id)
+            }
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use chrono::Utc;
-
-    use super::*;
-    use crate::ledger::Ledger;
-    use crate::models::{CreateAccountInstruction, Key, TransactionStatus};
+    use {
+        super::*,
+        crate::{
+            ledger::Ledger,
+            models::{CreateAccountInstruction, Key, TransactionStatus},
+        },
+        chrono::Utc,
+    };
 
     // Helper to set up test environment with existing accounts
     fn setup_for_transfer() -> (TransactionProcessor, Arc<RwLock<Ledger>>, Uuid, Uuid) {

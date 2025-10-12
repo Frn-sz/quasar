@@ -27,4 +27,7 @@ pub trait LedgerInterface {
 
     /// Marks a transaction ID as processed.
     fn mark_transaction_processed(&mut self, transaction_id: Uuid) -> Result<(), LedgerError>;
+
+    /// Deposits an amount into the specified account.
+    fn deposit_into_account(&mut self, account_id: Uuid, amount: u64) -> Result<(), LedgerError>;
 }

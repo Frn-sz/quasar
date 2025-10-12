@@ -1,17 +1,38 @@
 use config::{Config, ConfigError, File, FileFormat};
 
 #[derive(Clone, Debug, serde::Deserialize)]
-pub struct QuasarConfig {
+pub struct QuasarServerConfig {
     pub grpc: GrpcConfig,
     pub http: HttpConfig,
     pub debug: bool,
 }
 
-impl QuasarConfig {
+impl QuasarServerConfig {
     pub fn from_file(config_path: &str) -> Result<Self, ConfigError> {
         let builder = Config::builder().add_source(File::new(config_path, FileFormat::Toml));
 
-        let config: QuasarConfig = builder.build()?.try_deserialize()?;
+        let config: QuasarServerConfig = builder.build()?.try_deserialize()?;
+
+        Ok(config)
+    }
+}
+
+#[derive(Clone, Debug, serde::Deserialize)]
+pub struct QuasarClientConfig {
+    pub grpc: GrpcConfig,
+    pub http: HttpConfig,
+    pub debug: bool,
+    pub tasks: usize,
+    // Chance (0-100) of creating a new account instead of making a transfer
+    pub create_chance: u8,
+    pub deposit_chance: u8,
+}
+
+impl QuasarClientConfig {
+    pub fn from_file(config_path: &str) -> Result<Self, ConfigError> {
+        let builder = Config::builder().add_source(File::new(config_path, FileFormat::Toml));
+
+        let config: QuasarClientConfig = builder.build()?.try_deserialize()?;
 
         Ok(config)
     }
