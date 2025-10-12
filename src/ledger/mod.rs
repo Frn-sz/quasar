@@ -1,16 +1,16 @@
 pub mod error;
 pub mod interface;
-use std::{
-    collections::{HashMap, HashSet},
-    sync::RwLock,
-};
-
-use chrono::Utc;
-use uuid::Uuid;
-
-use crate::{
-    ledger::{error::LedgerError, interface::LedgerInterface},
-    models::{Account, HistoricTransfer, Key, TransferInstruction},
+use {
+    crate::{
+        ledger::{error::LedgerError, interface::LedgerInterface},
+        models::{Account, HistoricTransfer, Key, TransferInstruction},
+    },
+    chrono::Utc,
+    std::{
+        collections::{HashMap, HashSet},
+        sync::RwLock,
+    },
+    uuid::Uuid,
 };
 
 pub struct Ledger {
@@ -18,6 +18,12 @@ pub struct Ledger {
     pub accounts: RwLock<HashMap<Uuid, Account>>,
     // To prevent processing the same transaction multiple times (ensure idempotency).
     processed_transactions: RwLock<HashSet<Uuid>>,
+}
+
+impl Default for Ledger {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Ledger {
@@ -71,6 +77,7 @@ impl LedgerInterface for Ledger {
 
     fn get_account(&self, id: Uuid) -> Result<Account, LedgerError> {
         let accounts = self.acquire_accounts_read_lock()?;
+
         accounts
             .get(&id)
             .cloned()
@@ -119,14 +126,25 @@ impl LedgerInterface for Ledger {
         processed_transactions.insert(transaction_id);
         Ok(())
     }
+
+    fn deposit_into_account(&mut self, account_id: Uuid, amount: u64) -> Result<(), LedgerError> {
+        let mut accounts = self.acquire_accounts_write_lock()?;
+        let account = accounts
+            .get_mut(&account_id)
+            .ok_or(LedgerError::AccountNotFound)?;
+
+        account.balance = account.balance.saturating_add(amount);
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use uuid::Uuid;
-
-    use super::*;
-    use crate::models::{Key, TransferInstruction};
+    use {
+        super::*,
+        crate::models::{Key, TransferInstruction},
+        uuid::Uuid,
+    };
 
     #[test]
     fn test_create_account() {
