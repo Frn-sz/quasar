@@ -9,6 +9,7 @@ pub mod config;
 pub mod grpc_server;
 pub mod ledger;
 pub mod logging;
+pub mod metrics;
 pub mod models;
 pub mod transaction_processor;
 

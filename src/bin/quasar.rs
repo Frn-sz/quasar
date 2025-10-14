@@ -16,7 +16,7 @@ async fn main() {
     let config = match QuasarServerConfig::from_file(&cli.config) {
         Ok(config) => config,
         Err(e) => {
-            error!("Erorr: failed to load server config file: {e}");
+            error!("Error: failed to load server config file: {e}");
             return;
         }
     };

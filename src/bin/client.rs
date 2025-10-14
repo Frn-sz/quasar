@@ -73,37 +73,45 @@ async fn run_worker(
             let create_req = CreateAccountRequest {
                 transaction_id: Uuid::new_v4().to_string(),
             };
-            if let Ok(res) = client.create_account(create_req).await {
-                let res = res.into_inner();
-                if res.success {
-                    let new_id = Uuid::parse_str(&res.created_account_id)?;
+
+            let Ok(creation_response) = client.create_account(create_req.clone()).await else {
+                continue;
+            };
+
+            let creation = creation_response.into_inner();
+
+            if creation.success {
+                let new_id = Uuid::parse_str(&creation.created_account_id)?;
+                {
                     account_ids.write().await.push(new_id);
-                    info!("[Worker {}] Created account: {}", worker_id, new_id);
                 }
+                info!("[Worker {}] Created account: {}", worker_id, new_id);
             }
         } else if operation_chance < config.create_chance + config.deposit_chance {
-            let ids_lock = account_ids.read().await;
-            if let Some(random_id) = ids_lock.choose(&mut rng) {
-                let id_to_deposit = *random_id;
-                drop(ids_lock);
+            let Some(id_to_deposit) = ({ account_ids.read().await.choose(&mut rng).cloned() })
+            else {
+                continue;
+            };
 
-                let amount = rng.random_range(100..500);
-                let deposit_req = DepositRequest {
-                    transaction_id: Uuid::new_v4().to_string(),
-                    destination_account_id: id_to_deposit.to_string(),
-                    amount,
-                };
-                if client.process_deposit(deposit_req).await.is_ok() {
-                    info!(
-                        "[Worker {}] Deposited {} into account {}",
-                        worker_id, amount, id_to_deposit
-                    );
-                }
+            let amount = rng.random_range(100..500);
+
+            let deposit_req = DepositRequest {
+                transaction_id: Uuid::new_v4().to_string(),
+                destination_account_id: id_to_deposit.to_string(),
+                amount: rng.random_range(100..500),
+            };
+
+            if client.process_deposit(deposit_req).await.is_ok() {
+                info!(
+                    "[Worker {}] Deposited {} into account {}",
+                    worker_id, amount, id_to_deposit
+                );
             }
         } else {
             let (source_id, dest_id) = {
                 let ids_lock = account_ids.read().await;
                 if ids_lock.len() < 2 {
+                    // Need at least 2 accounts to transfer between
                     continue;
                 }
                 let sample: Vec<&Uuid> = ids_lock.choose_multiple(&mut rng, 2).collect();
@@ -115,31 +123,37 @@ async fn run_worker(
                 account_id: source_id.to_string(),
             };
 
-            if let Ok(res) = client.get_balance(get_balance_req).await {
-                let balance = res.into_inner().balance;
+            let Ok(balance_response) = client.get_balance(get_balance_req).await else {
+                continue;
+            };
 
-                if balance > 0 {
-                    let amount_to_transfer = rng.random_range(1..=balance);
-                    let transfer_req = TransferRequest {
-                        transaction_id: Uuid::new_v4().to_string(),
-                        source_account_id: source_id.to_string(),
-                        destination_account_id: dest_id.to_string(),
-                        amount: amount_to_transfer,
-                    };
-                    match client.process_transfer(transfer_req).await {
-                        Ok(_) => {
-                            info!(
-                                "[Worker {}] Transferred {} from {} to {}",
-                                worker_id, amount_to_transfer, source_id, dest_id
-                            );
-                        }
-                        Err(e) => {
-                            warn!(
-                                "[Worker {}] Transfer of {} from {} to {} failed: {}",
-                                worker_id, amount_to_transfer, source_id, dest_id, e
-                            );
-                        }
-                    }
+            let balance = balance_response.into_inner().balance;
+
+            if balance == 0 {
+                continue;
+            }
+
+            let amount_to_transfer = rng.random_range(1..=balance);
+
+            let transfer_req = TransferRequest {
+                transaction_id: Uuid::new_v4().to_string(),
+                source_account_id: source_id.to_string(),
+                destination_account_id: dest_id.to_string(),
+                amount: amount_to_transfer,
+            };
+
+            match client.process_transfer(transfer_req).await {
+                Ok(_) => {
+                    info!(
+                        "[Worker {}] Transferred {} from {} to {}",
+                        worker_id, amount_to_transfer, source_id, dest_id
+                    );
+                }
+                Err(e) => {
+                    warn!(
+                        "[Worker {}] Transfer of {} from {} to {} failed: {}",
+                        worker_id, amount_to_transfer, source_id, dest_id, e
+                    );
                 }
             }
         }
