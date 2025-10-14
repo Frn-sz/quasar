@@ -1,0 +1,22 @@
+version: "3.8"
+
+services:
+  victoria-metrics:
+    image: victoriametrics/victoria-metrics:v1.99.1
+    container_name: victoria-metrics
+    ports:
+      - "8428:8428"
+    command:
+      - "--httpListenAddr=:8428"
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana-oss:10.4.2
+    container_name: grafana
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - victoria-metrics
+    restart: unless-stopped
