@@ -1,4 +1,7 @@
 debug = false
+tasks = 512
+create_chance = 10
+deposit_chance = 10
 
 [grpc]
 address = "0.0.0.0"
@@ -7,7 +10,3 @@ port = 50051
 [http]
 address = "0.0.0.0"
 port = 8080
-
-[metrics]
-push_interval_seconds = 5
-remote_write_url = "http://localhost:8428/api/v1/write"

@@ -7,6 +7,7 @@ pub mod interface;
 use {
     crate::{
         ledger::interface::LedgerInterface,
+        metrics::TRANSACTIONS_PROCESSED_TOTAL,
         models::{
             CreateAccountInstruction, DepositInstruction, Instruction, Transaction,
             TransferInstruction,
@@ -116,6 +117,7 @@ impl TransactionProcessorInterface for TransactionProcessor {
         &mut self,
         transaction: Transaction,
     ) -> Result<TransactionResult, TransactionProcessorError> {
+        TRANSACTIONS_PROCESSED_TOTAL.inc();
         match transaction.instruction {
             Instruction::Transfer(inst) => self.process_transfer(transaction.id, inst),
             Instruction::CreateAccount(inst) => self.process_create_account(transaction.id, inst),

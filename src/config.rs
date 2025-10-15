@@ -4,6 +4,7 @@ use config::{Config, ConfigError, File, FileFormat};
 pub struct QuasarServerConfig {
     pub grpc: GrpcConfig,
     pub http: HttpConfig,
+    pub metrics: VictoriaMetricsConfig,
     pub debug: bool,
 }
 
@@ -48,4 +49,10 @@ pub struct GrpcConfig {
 pub struct HttpConfig {
     pub address: String,
     pub port: u16,
+}
+
+#[derive(Clone, Debug, serde::Deserialize)]
+pub struct VictoriaMetricsConfig {
+    pub remote_write_url: String,
+    pub push_interval_seconds: u64,
 }

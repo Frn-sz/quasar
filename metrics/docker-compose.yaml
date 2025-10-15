@@ -1,8 +1,6 @@
-version: "3.8"
-
 services:
   victoria-metrics:
-    image: victoriametrics/victoria-metrics:v1.99.1
+    image: victoriametrics/victoria-metrics
     container_name: victoria-metrics
     ports:
       - "8428:8428"

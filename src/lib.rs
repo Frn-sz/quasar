@@ -1,5 +1,8 @@
 use {
-    crate::{grpc_server::start_grpc_service, logging::init_logging},
+    crate::{
+        grpc_server::start_grpc_service, logging::init_logging,
+        metrics::handler::start_metrics_pusher,
+    },
     std::sync::{Arc, RwLock},
     tokio::signal::ctrl_c,
     tracing::error,
@@ -38,8 +41,17 @@ impl Quasar {
         let mut services = tokio::task::JoinSet::new();
         let _logging_guard = init_logging(self.config.debug);
 
-        // TODO: add REST API service here
+        // Metrics pusher service
+        {
+            let metrics_config = self.config.metrics.clone();
+            let shutdown_receiver = shutdown_sender.subscribe();
 
+            services.spawn(async move {
+                start_metrics_pusher(metrics_config, shutdown_receiver).await;
+            });
+        }
+
+        // gRPC service
         {
             let grpc_processor = Arc::clone(&self.transaction_processor);
             let grpc_config = self.config.grpc.clone();
