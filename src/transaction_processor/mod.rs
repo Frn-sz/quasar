@@ -7,7 +7,10 @@ pub mod interface;
 use {
     crate::{
         ledger::interface::LedgerInterface,
-        metrics::TRANSACTIONS_PROCESSED_TOTAL,
+        metrics::{
+            ACCOUNT_CREATION_TIME_US, ACCOUNTS_CREATED_TOTAL, DEPOSIT_TIME_US, GET_BALANCE_TIME_US,
+            TRANSACTION_PROCESSING_TIME_US, TRANSACTIONS_PROCESSED_TOTAL, TRANSFER_TIME_US,
+        },
         models::{
             CreateAccountInstruction, DepositInstruction, Instruction, Transaction,
             TransferInstruction,
@@ -74,6 +77,7 @@ impl TransactionProcessor {
         }
 
         let created_account_id = ledger.create_account(instruction.keys)?;
+
         ledger.mark_transaction_processed(transaction_id)?;
 
         Ok(TransactionResult::AccountCreated(created_account_id))
@@ -118,16 +122,28 @@ impl TransactionProcessorInterface for TransactionProcessor {
         transaction: Transaction,
     ) -> Result<TransactionResult, TransactionProcessorError> {
         TRANSACTIONS_PROCESSED_TOTAL.inc();
-        match transaction.instruction {
-            Instruction::Transfer(inst) => self.process_transfer(transaction.id, inst),
-            Instruction::CreateAccount(inst) => self.process_create_account(transaction.id, inst),
-            Instruction::Deposit(deposit_instruction) => {
-                self.process_deposit(transaction.id, deposit_instruction)
+        measure_us!(TRANSACTION_PROCESSING_TIME_US, {
+            match transaction.instruction {
+                Instruction::Transfer(inst) => measure_us!(TRANSFER_TIME_US, {
+                    self.process_transfer(transaction.id, inst)
+                }),
+                Instruction::CreateAccount(inst) => {
+                    measure_us!(ACCOUNT_CREATION_TIME_US, {
+                        self.process_create_account(transaction.id, inst)
+                    })
+                }
+                Instruction::Deposit(deposit_instruction) => {
+                    measure_us!(DEPOSIT_TIME_US, {
+                        self.process_deposit(transaction.id, deposit_instruction)
+                    })
+                }
+                Instruction::GetBalance(get_balance_instruction) => {
+                    measure_us!(GET_BALANCE_TIME_US, {
+                        self.get_balance(get_balance_instruction.account_id)
+                    })
+                }
             }
-            Instruction::GetBalance(get_balance_instruction) => {
-                self.get_balance(get_balance_instruction.account_id)
-            }
-        }
+        })
     }
 }
 

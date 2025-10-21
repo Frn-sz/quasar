@@ -3,6 +3,7 @@ pub mod interface;
 use {
     crate::{
         ledger::{error::LedgerError, interface::LedgerInterface},
+        metrics::ACCOUNTS_CREATED_TOTAL,
         models::{Account, HistoricTransfer, Key, TransferInstruction},
     },
     chrono::Utc,
@@ -72,6 +73,7 @@ impl LedgerInterface for Ledger {
         let mut accounts = self.acquire_accounts_write_lock()?;
         let (account_id, account) = Account::new(keys);
         accounts.insert(account_id, account);
+        ACCOUNTS_CREATED_TOTAL.inc();
         Ok(account_id)
     }
 

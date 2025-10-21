@@ -12,6 +12,8 @@ pub mod config;
 pub mod grpc_server;
 pub mod ledger;
 pub mod logging;
+#[macro_use]
+pub mod macros;
 pub mod metrics;
 pub mod models;
 pub mod transaction_processor;

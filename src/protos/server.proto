@@ -21,20 +21,20 @@ message CreateAccountRequest {
 message CreateAccountResponse {
   bool success = 1;
   string error_message = 2;
-  string created_account_id = 3; 
+  string created_account_id = 3;
 }
 
 message TransferRequest {
   string transaction_id = 1;
-  string source_account_id = 2; 
-  string destination_account_id = 3; 
+  string source_account_id = 2;
+  string destination_account_id = 3;
   uint64 amount = 4;
 }
 
 message DepositRequest {
   string transaction_id = 1;
-  string destination_account_id = 2; 
-  uint64 amount = 3; 
+  string destination_account_id = 2;
+  uint64 amount = 3;
 }
 
 message GetBalanceRequest {
@@ -45,5 +45,5 @@ message GetBalanceRequest {
 message GetBalanceResponse {
   bool success = 1;
   string error_message = 2;
-  uint64 balance = 3; 
+  uint64 balance = 3;
 }
