@@ -31,12 +31,15 @@ lazy_static = "1.5.0"
 reqwest = "0.12.24"
 prometheus-reqwest-remote-write = "0.4.0"
 hostname = "0.4.1"
+dhat = "0.3.3"
 
 
 [profile.release]
-lto = true
+lto = false
+strip = "none"
 codegen-units = 1
 panic = "abort"
+debug = true
 
 [build-dependencies]
 tonic-prost-build = "0.14.2"

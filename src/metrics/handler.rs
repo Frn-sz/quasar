@@ -84,7 +84,7 @@ async fn push_metrics(
     match response {
         Ok(resp) => {
             if resp.status().is_success() {
-                debug!(
+                info!(
                     "Successfully sent metrics in {}us.",
                     start_time.elapsed().as_micros()
                 );
@@ -189,20 +189,19 @@ pub fn gauge_vec(name: &str, help: &str, labels: &[&str]) -> GaugeVec {
     gauge_vec
 }
 
-// Microsecond precision histogram for low latency operations (e.g., pool lookups, analysis)
-// Buckets: 1us to 10ms
-pub fn histogram_microseconds(name: &str, help: &str) -> Histogram {
+pub fn histogram_fast_ops(name: &str, help: &str) -> Histogram {
     let buckets = vec![
-        0.000001, // 1us
-        0.000005, // 5us
-        0.00001,  // 10us
-        0.00005,  // 50us
-        0.0001,   // 100us
-        0.0005,   // 500us
-        0.001,    // 1ms
-        0.002,    // 2ms
-        0.005,    // 5ms
-        0.01,     // 10ms
+        0.0001, // 100us
+        0.0005, // 500us
+        0.001,  // 1ms
+        0.005,  // 5ms
+        0.01,   // 10ms
+        0.025,  // 25ms
+        0.05,   // 50ms
+        0.1,    // 100ms
+        0.5,    // 500ms
+        1.0,    // 1s
+        2.5,    // 2.5s
     ];
 
     let opts = prometheus::histogram_opts!(name, help, buckets);
@@ -217,19 +216,19 @@ pub fn histogram_microseconds(name: &str, help: &str) -> Histogram {
     histogram
 }
 
-// Millisecond precision histogram for transaction building and processing
-// Buckets: 100us to 100ms
-pub fn histogram_milliseconds(name: &str, help: &str) -> Histogram {
+pub fn histogram_slow_ops(name: &str, help: &str) -> Histogram {
     let buckets = vec![
-        0.0001, // 100us
-        0.0005, // 500us
-        0.001,  // 1ms
-        0.005,  // 5ms
-        0.01,   // 10ms
-        0.025,  // 25ms
-        0.05,   // 50ms
-        0.075,  // 75ms
-        0.1,    // 100ms
+        0.01, // 10ms
+        0.05, // 50ms
+        0.1,  // 100ms
+        0.25, // 250ms
+        0.5,  // 500ms
+        1.0,  // 1s
+        2.5,  // 2.5s
+        5.0,  // 5s
+        10.0, // 10s
+        15.0, // 15s
+        30.0, // 30s
     ];
 
     let opts = prometheus::histogram_opts!(name, help, buckets);

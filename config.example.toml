@@ -10,4 +10,4 @@ port = 8080
 
 [metrics]
 push_interval_seconds = 5
-remote_write_url = "http://localhost:8428/api/v1/write"
+remote_write_url = "http://localhost:8428/api/v1/import/prometheus"

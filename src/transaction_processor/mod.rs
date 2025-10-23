@@ -8,8 +8,9 @@ use {
     crate::{
         ledger::interface::LedgerInterface,
         metrics::{
-            ACCOUNT_CREATION_TIME_US, ACCOUNTS_CREATED_TOTAL, DEPOSIT_TIME_US, GET_BALANCE_TIME_US,
-            TRANSACTION_PROCESSING_TIME_US, TRANSACTIONS_PROCESSED_TOTAL, TRANSFER_TIME_US,
+            ACCOUNT_CREATION_TIME_SECONDS, DEPOSIT_TIME_SECONDS, GET_BALANCE_TIME_SECONDS,
+            TRANSACTION_PROCESSING_TIME_SECONDS, TRANSACTIONS_PROCESSED_TOTAL,
+            TRANSFER_TIME_SECONDS,
         },
         models::{
             CreateAccountInstruction, DepositInstruction, Instruction, Transaction,
@@ -122,23 +123,23 @@ impl TransactionProcessorInterface for TransactionProcessor {
         transaction: Transaction,
     ) -> Result<TransactionResult, TransactionProcessorError> {
         TRANSACTIONS_PROCESSED_TOTAL.inc();
-        measure_us!(TRANSACTION_PROCESSING_TIME_US, {
+        measure!(TRANSACTION_PROCESSING_TIME_SECONDS, {
             match transaction.instruction {
-                Instruction::Transfer(inst) => measure_us!(TRANSFER_TIME_US, {
+                Instruction::Transfer(inst) => measure!(TRANSFER_TIME_SECONDS, {
                     self.process_transfer(transaction.id, inst)
                 }),
                 Instruction::CreateAccount(inst) => {
-                    measure_us!(ACCOUNT_CREATION_TIME_US, {
+                    measure!(ACCOUNT_CREATION_TIME_SECONDS, {
                         self.process_create_account(transaction.id, inst)
                     })
                 }
                 Instruction::Deposit(deposit_instruction) => {
-                    measure_us!(DEPOSIT_TIME_US, {
+                    measure!(DEPOSIT_TIME_SECONDS, {
                         self.process_deposit(transaction.id, deposit_instruction)
                     })
                 }
                 Instruction::GetBalance(get_balance_instruction) => {
-                    measure_us!(GET_BALANCE_TIME_US, {
+                    measure!(GET_BALANCE_TIME_SECONDS, {
                         self.get_balance(get_balance_instruction.account_id)
                     })
                 }

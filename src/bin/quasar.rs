@@ -21,6 +21,8 @@ async fn main() {
         }
     };
 
+    let _profiler = dhat::Profiler::new_heap();
+
     let mut app = Quasar::new(config);
 
     if let Err(e) = app.run().await {
