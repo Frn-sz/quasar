@@ -21,7 +21,7 @@ use {
 };
 
 pub struct TransactionProcessor {
-    ledger: Arc<RwLock<dyn LedgerInterface + Send + Sync>>,
+    pub ledger: Arc<RwLock<dyn LedgerInterface + Send + Sync>>,
 }
 
 impl TransactionProcessor {
@@ -138,11 +138,12 @@ mod tests {
             models::{CreateAccountInstruction, Key, TransactionStatus},
         },
         chrono::Utc,
+        std::collections::HashMap,
     };
 
     // Helper to set up test environment with existing accounts
     fn setup_for_transfer() -> (TransactionProcessor, Arc<RwLock<Ledger>>, Uuid, Uuid) {
-        let ledger = Arc::new(RwLock::new(Ledger::new()));
+        let ledger = Arc::new(RwLock::new(Ledger::new(HashMap::new())));
         let processor = TransactionProcessor::new(ledger.clone());
 
         let mut ledger_lock = ledger.write().unwrap();
@@ -176,7 +177,7 @@ mod tests {
 
     #[test]
     fn test_process_create_account_transaction() {
-        let ledger = Arc::new(RwLock::new(Ledger::new()));
+        let ledger = Arc::new(RwLock::new(Ledger::new(HashMap::new())));
         let mut processor = TransactionProcessor::new(ledger.clone());
 
         let transaction = Transaction {

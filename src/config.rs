@@ -5,6 +5,7 @@ pub struct QuasarServerConfig {
     pub grpc: GrpcConfig,
     pub http: HttpConfig,
     pub debug: bool,
+    pub persistence: PersistenceConfig,
 }
 
 impl QuasarServerConfig {
@@ -48,4 +49,9 @@ pub struct GrpcConfig {
 pub struct HttpConfig {
     pub address: String,
     pub port: u16,
+}
+
+#[derive(Clone, Debug, serde::Deserialize)]
+pub struct PersistenceConfig {
+    pub db_path: String,
 }

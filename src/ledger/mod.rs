@@ -22,14 +22,14 @@ pub struct Ledger {
 
 impl Default for Ledger {
     fn default() -> Self {
-        Self::new()
+        Self::new(HashMap::new())
     }
 }
 
 impl Ledger {
-    pub fn new() -> Self {
+    pub fn new(accounts: HashMap<Uuid, Account>) -> Self {
         Ledger {
-            accounts: RwLock::new(HashMap::new()),
+            accounts: RwLock::new(accounts),
             processed_transactions: RwLock::new(HashSet::new()),
         }
     }
@@ -143,12 +143,13 @@ mod tests {
     use {
         super::*,
         crate::models::{Key, TransferInstruction},
+        std::collections::HashMap,
         uuid::Uuid,
     };
 
     #[test]
     fn test_create_account() {
-        let mut ledger = Ledger::new();
+        let mut ledger = Ledger::new(HashMap::new());
         let keys = vec![Key::Email("test@test.com".to_string())];
         let account_id_result = ledger.create_account(keys);
         assert!(account_id_result.is_ok());
@@ -161,7 +162,7 @@ mod tests {
 
     #[test]
     fn test_get_existing_account() {
-        let mut ledger = Ledger::new();
+        let mut ledger = Ledger::new(HashMap::new());
         let account_id = ledger.create_account(vec![]).unwrap();
         let account_result = ledger.get_account(account_id);
         assert!(account_result.is_ok());
@@ -170,7 +171,7 @@ mod tests {
 
     #[test]
     fn test_commit_transfer_and_is_processed() {
-        let mut ledger = Ledger::new();
+        let mut ledger = Ledger::new(HashMap::new());
         let source_id = ledger.create_account(vec![]).unwrap();
         let dest_id = ledger.create_account(vec![]).unwrap();
 
@@ -212,7 +213,7 @@ mod tests {
 
     #[test]
     fn test_mark_transaction_as_processed() {
-        let mut ledger = Ledger::new();
+        let mut ledger = Ledger::new(HashMap::new());
         let tx_id = Uuid::new_v4();
 
         assert!(!ledger.is_transaction_processed(tx_id).unwrap());

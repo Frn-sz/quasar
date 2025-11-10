@@ -1,10 +1,11 @@
+use serde::{Deserialize, Serialize};
 use {
     chrono::{DateTime, Utc},
     uuid::Uuid,
 };
 
 /// Represents a possible identifier for an account.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Key {
     CPF(String),
     Email(String),
@@ -12,14 +13,14 @@ pub enum Key {
     Random(String),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TransactionStatus {
     Pending,
     Completed,
     Failed,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Instruction {
     Transfer(TransferInstruction),
     CreateAccount(CreateAccountInstruction),
@@ -27,7 +28,7 @@ pub enum Instruction {
     GetBalance(GetBalanceInstruction),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Transaction {
     pub id: Uuid,
     pub instruction: Instruction,
@@ -35,14 +36,14 @@ pub struct Transaction {
     pub timestamp: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TransferInstruction {
     pub source_account_id: Uuid,
     pub destination_account_id: Uuid,
     pub amount: u64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateAccountInstruction {
     pub keys: Vec<Key>,
 }
@@ -53,18 +54,18 @@ impl CreateAccountInstruction {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DepositInstruction {
     pub destination_account_id: Uuid,
     pub amount: u64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetBalanceInstruction {
     pub account_id: Uuid,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HistoricTransfer {
     pub transaction_id: Uuid,
     pub instruction: TransferInstruction,
@@ -72,7 +73,7 @@ pub struct HistoricTransfer {
 }
 
 /// Account is very simplified, since we don't really care about user data
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct Account {
     pub uuid: Uuid,
     pub balance: u64,
