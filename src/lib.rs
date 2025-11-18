@@ -1,14 +1,11 @@
 use {
     crate::{
-        grpc_server::start_grpc_service,
-        ledger::Ledger,
-        logging::init_logging,
-        persistence::Persistence,
-        transaction_processor::TransactionProcessor,
+        grpc_server::start_grpc_service, ledger::Ledger, logging::init_logging,
+        persistence::Persistence, transaction_processor::TransactionProcessor,
     },
     std::sync::{Arc, RwLock},
     tokio::signal::ctrl_c,
-    tracing::error,
+    tracing::{error, info},
 };
 
 pub mod config;
@@ -29,15 +26,16 @@ pub struct Quasar {
 
 impl Quasar {
     pub fn new(config: config::QuasarServerConfig) -> Self {
-        let persistence =
-            Persistence::new(&config.persistence.db_path).expect("Failed to initialize persistence");
-        let accounts = persistence.load_accounts().expect("Failed to load accounts");
+        let persistence = Persistence::new(&config.persistence.db_path)
+            .expect("Failed to initialize persistence");
+        let accounts = persistence
+            .load_accounts()
+            .expect("Failed to load accounts");
         let ledger = Arc::new(RwLock::new(Ledger::new(accounts)));
 
         // Cheap clone of Arc
-        let transaction_processor = Arc::new(RwLock::new(TransactionProcessor::new(
-            ledger.clone(),
-        )));
+        let transaction_processor =
+            Arc::new(RwLock::new(TransactionProcessor::new(ledger.clone())));
 
         Quasar {
             transaction_processor,
@@ -53,6 +51,10 @@ impl Quasar {
         let _logging_guard = init_logging(self.config.debug);
 
         // TODO: add REST API service here
+        info!(
+            "Initializing with {} accounts",
+            self.ledger.read().unwrap().accounts.read().unwrap().len()
+        );
 
         {
             let grpc_processor = Arc::clone(&self.transaction_processor);
