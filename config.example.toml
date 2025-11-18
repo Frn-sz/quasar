@@ -1,9 +1,11 @@
-debug = true
+# Example configuration for Quasar server
+grpc.address = "127.0.0.1"
+grpc.port = 50051
 
-[grpc]
-address = "0.0.0.0"
-port = 50051
+http.address = "127.0.0.1"
+http.port = 8080
 
-[http]
-address = "0.0.0.0"
-port = 8080
+debug = false
+
+[persistence]
+db_path = "quasar.db"
