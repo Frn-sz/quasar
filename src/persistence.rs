@@ -1,4 +1,5 @@
 use crate::models::Account;
+use dashmap::DashMap;
 use rusqlite::{Connection, Result};
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -28,11 +29,11 @@ impl Persistence {
         Ok(())
     }
 
-    pub fn save_accounts(&mut self, accounts: &HashMap<Uuid, Account>) -> Result<()> {
+    pub fn save_accounts(&mut self, accounts: &DashMap<Uuid, Account>) -> Result<()> {
         let tx = self.conn.transaction()?;
         tx.execute("DELETE FROM accounts", [])?;
 
-        for account in accounts.values() {
+        for account in accounts.iter() {
             let keys = serde_json::to_string(&account.keys).unwrap();
             let transaction_history = serde_json::to_string(&account.transaction_history).unwrap();
 
@@ -50,8 +51,10 @@ impl Persistence {
         tx.commit()
     }
 
-    pub fn load_accounts(&self) -> Result<HashMap<Uuid, Account>> {
-        let mut stmt = self.conn.prepare("SELECT uuid, balance, keys, transaction_history FROM accounts")?;
+    pub fn load_accounts(&self) -> Result<DashMap<Uuid, Account>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT uuid, balance, keys, transaction_history FROM accounts")?;
         let account_iter = stmt.query_map([], |row| {
             let uuid: String = row.get(0)?;
             let uuid = Uuid::parse_str(&uuid).unwrap();
@@ -73,7 +76,8 @@ impl Persistence {
             ))
         })?;
 
-        let mut accounts = HashMap::new();
+        let accounts = DashMap::new();
+
         for account in account_iter {
             let (uuid, account) = account?;
             accounts.insert(uuid, account);

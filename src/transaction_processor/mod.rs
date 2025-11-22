@@ -21,28 +21,27 @@ use {
 };
 
 pub struct TransactionProcessor {
-    pub ledger: Arc<RwLock<dyn LedgerInterface + Send + Sync>>,
+    pub ledger: Arc<dyn LedgerInterface + Send + Sync>,
 }
 
 impl TransactionProcessor {
-    pub fn new(ledger: Arc<RwLock<dyn LedgerInterface + Send + Sync>>) -> Self {
+    pub fn new(ledger: Arc<dyn LedgerInterface + Send + Sync>) -> Self {
         TransactionProcessor { ledger }
     }
 
     fn process_transfer(
-        &mut self,
+        &self,
         transaction_id: Uuid,
         instruction: TransferInstruction,
     ) -> Result<TransactionResult, TransactionProcessorError> {
-        let mut ledger = self.ledger.write().unwrap();
-
-        if ledger.is_transaction_processed(transaction_id)? {
+        if self.ledger.is_transaction_processed(transaction_id)? {
             return Err(TransactionProcessorError::TransactionAlreadyProcessed);
         }
 
-        let mut source_account = ledger.get_account(instruction.source_account_id)?;
-
-        let mut dest_account = ledger.get_account(instruction.destination_account_id)?;
+        let mut source_account = self.ledger.get_account(instruction.source_account_id)?;
+        let mut dest_account = self
+            .ledger
+            .get_account(instruction.destination_account_id)?;
 
         if source_account.balance < instruction.amount {
             return Err(TransactionProcessorError::InsufficientFunds);
@@ -51,7 +50,7 @@ impl TransactionProcessor {
         source_account.balance = source_account.balance.saturating_sub(instruction.amount);
         dest_account.balance = dest_account.balance.saturating_add(instruction.amount);
 
-        ledger.commit_transfer(
+        self.ledger.commit_transfer(
             transaction_id,
             &instruction,
             &mut source_account,
@@ -62,36 +61,32 @@ impl TransactionProcessor {
     }
 
     fn process_create_account(
-        &mut self,
+        &self,
         transaction_id: Uuid,
         instruction: CreateAccountInstruction,
     ) -> Result<TransactionResult, TransactionProcessorError> {
-        let mut ledger = self.ledger.write().unwrap();
-
-        if ledger.is_transaction_processed(transaction_id)? {
+        if self.ledger.is_transaction_processed(transaction_id)? {
             return Err(TransactionProcessorError::TransactionAlreadyProcessed);
         }
 
-        let created_account_id = ledger.create_account(instruction.keys)?;
-        ledger.mark_transaction_processed(transaction_id)?;
+        let created_account_id = self.ledger.create_account(instruction.keys)?;
+        self.ledger.mark_transaction_processed(transaction_id)?;
 
         Ok(TransactionResult::AccountCreated(created_account_id))
     }
 
     fn process_deposit(
-        &mut self,
+        &self,
         transaction_id: Uuid,
         instruction: DepositInstruction,
     ) -> Result<TransactionResult, TransactionProcessorError> {
-        let mut ledger = self.ledger.write().unwrap();
-
-        if ledger.is_transaction_processed(transaction_id)? {
+        if self.ledger.is_transaction_processed(transaction_id)? {
             return Err(TransactionProcessorError::TransactionAlreadyProcessed);
         }
 
-        ledger.deposit_into_account(instruction.destination_account_id, instruction.amount)?;
-
-        ledger.mark_transaction_processed(transaction_id)?;
+        self.ledger
+            .deposit_into_account(instruction.destination_account_id, instruction.amount)?;
+        self.ledger.mark_transaction_processed(transaction_id)?;
 
         Ok(TransactionResult::Success)
     }
@@ -100,12 +95,7 @@ impl TransactionProcessor {
         &self,
         account_id: Uuid,
     ) -> Result<TransactionResult, TransactionProcessorError> {
-        let ledger = self
-            .ledger
-            .read()
-            .map_err(|_| TransactionProcessorError::FailedToAcquireLedgerLock)?;
-
-        let account = ledger.get_account(account_id)?;
+        let account = self.ledger.get_account(account_id)?;
 
         Ok(TransactionResult::Balance(account.balance))
     }
@@ -138,21 +128,25 @@ mod tests {
             models::{CreateAccountInstruction, Key, TransactionStatus},
         },
         chrono::Utc,
-        std::collections::HashMap,
+        dashmap::DashMap,
     };
 
     // Helper to set up test environment with existing accounts
-    fn setup_for_transfer() -> (TransactionProcessor, Arc<RwLock<Ledger>>, Uuid, Uuid) {
-        let ledger = Arc::new(RwLock::new(Ledger::new(HashMap::new())));
+    fn setup_for_transfer() -> (
+        TransactionProcessor,
+        Arc<dyn LedgerInterface + Send + Sync>,
+        Uuid,
+        Uuid,
+    ) {
+        let ledger = Arc::new(Ledger::new(DashMap::new()));
         let processor = TransactionProcessor::new(ledger.clone());
 
-        let mut ledger_lock = ledger.write().unwrap();
-        let source_id = ledger_lock.create_account(vec![]).unwrap();
-        let dest_id = ledger_lock.create_account(vec![]).unwrap();
+        let source_id = ledger.create_account(vec![]).unwrap();
+        let dest_id = ledger.create_account(vec![]).unwrap();
 
-        let mut source_account = ledger_lock.get_account(source_id).unwrap();
+        let mut source_account = ledger.get_account(source_id).unwrap();
         source_account.balance = 1000;
-        let mut dest_account = ledger_lock.get_account(dest_id).unwrap();
+        let mut dest_account = ledger.get_account(dest_id).unwrap();
 
         let transfer_inst = TransferInstruction {
             source_account_id: source_id,
@@ -161,7 +155,7 @@ mod tests {
         };
 
         // Initial commit to set the balance
-        ledger_lock
+        ledger
             .commit_transfer(
                 Uuid::new_v4(),
                 &transfer_inst,
@@ -170,14 +164,12 @@ mod tests {
             )
             .unwrap();
 
-        drop(ledger_lock);
-
         (processor, ledger, source_id, dest_id)
     }
 
     #[test]
     fn test_process_create_account_transaction() {
-        let ledger = Arc::new(RwLock::new(Ledger::new(HashMap::new())));
+        let ledger = Arc::new(Ledger::new(DashMap::new()));
         let mut processor = TransactionProcessor::new(ledger.clone());
 
         let transaction = Transaction {
@@ -192,8 +184,7 @@ mod tests {
         let result = processor.process_transaction(transaction);
         assert!(result.is_ok());
 
-        let ledger_lock = ledger.read().unwrap();
-        assert_eq!(ledger_lock.accounts.read().unwrap().len(), 1);
+        assert_eq!(ledger.accounts.len(), 1);
     }
 
     #[test]
@@ -214,9 +205,8 @@ mod tests {
         let result = processor.process_transaction(transaction);
         assert!(result.is_ok());
 
-        let ledger_lock = ledger.read().unwrap();
-        let source_account = ledger_lock.get_account(source_id).unwrap();
-        let dest_account = ledger_lock.get_account(dest_id).unwrap();
+        let source_account = ledger.get_account(source_id).unwrap();
+        let dest_account = ledger.get_account(dest_id).unwrap();
 
         assert_eq!(source_account.balance, 900);
         assert_eq!(dest_account.balance, 100);

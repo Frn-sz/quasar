@@ -21,17 +21,19 @@ pub struct Quasar {
     pub transaction_processor: Arc<RwLock<TransactionProcessor>>,
     pub config: config::QuasarServerConfig,
     pub persistence: Persistence,
-    ledger: Arc<RwLock<Ledger>>,
+    ledger: Arc<Ledger>,
 }
 
 impl Quasar {
     pub fn new(config: config::QuasarServerConfig) -> Self {
         let persistence = Persistence::new(&config.persistence.db_path)
             .expect("Failed to initialize persistence");
+
         let accounts = persistence
             .load_accounts()
             .expect("Failed to load accounts");
-        let ledger = Arc::new(RwLock::new(Ledger::new(accounts)));
+
+        let ledger = Arc::new(Ledger::new(accounts));
 
         // Cheap clone of Arc
         let transaction_processor =
@@ -50,11 +52,7 @@ impl Quasar {
         let mut services = tokio::task::JoinSet::new();
         let _logging_guard = init_logging(self.config.debug);
 
-        // TODO: add REST API service here
-        info!(
-            "Initializing with {} accounts",
-            self.ledger.read().unwrap().accounts.read().unwrap().len()
-        );
+        info!("Initializing with {} accounts", self.ledger.accounts.len());
 
         {
             let grpc_processor = Arc::clone(&self.transaction_processor);
@@ -71,8 +69,7 @@ impl Quasar {
                 services.abort_all();
                 tracing::info!("Shutdown signal received, stopping services...");
 
-                let accounts = self.ledger.read().unwrap().accounts.read().unwrap().clone();
-                self.persistence.save_accounts(&accounts).expect("Failed to save accounts");
+                self.persistence.save_accounts(&self.ledger.accounts).expect("Failed to save accounts");
 
                 tracing::info!("Accounts saved successfully");
             }
