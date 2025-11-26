@@ -16,17 +16,25 @@ use {
             interface::{TransactionProcessorInterface, TransactionResult},
         },
     },
-    std::sync::{Arc, RwLock},
+    dashmap::DashMap,
+    std::sync::Arc,
     uuid::Uuid,
 };
 
 pub struct TransactionProcessor {
     pub ledger: Arc<dyn LedgerInterface + Send + Sync>,
+    pub transactions: DashMap<Uuid, Transaction>,
 }
 
 impl TransactionProcessor {
-    pub fn new(ledger: Arc<dyn LedgerInterface + Send + Sync>) -> Self {
-        TransactionProcessor { ledger }
+    pub fn new(
+        ledger: Arc<dyn LedgerInterface + Send + Sync>,
+        transactions: DashMap<Uuid, Transaction>,
+    ) -> Self {
+        TransactionProcessor {
+            ledger,
+            transactions,
+        }
     }
 
     fn process_transfer(
@@ -106,6 +114,7 @@ impl TransactionProcessorInterface for TransactionProcessor {
         &mut self,
         transaction: Transaction,
     ) -> Result<TransactionResult, TransactionProcessorError> {
+        self.transactions.insert(transaction.id, transaction.clone());
         match transaction.instruction {
             Instruction::Transfer(inst) => self.process_transfer(transaction.id, inst),
             Instruction::CreateAccount(inst) => self.process_create_account(transaction.id, inst),
@@ -128,7 +137,7 @@ mod tests {
             models::{CreateAccountInstruction, Key, TransactionStatus},
         },
         chrono::Utc,
-        dashmap::DashMap,
+        dashmap::{DashMap, DashSet},
     };
 
     // Helper to set up test environment with existing accounts
@@ -138,8 +147,8 @@ mod tests {
         Uuid,
         Uuid,
     ) {
-        let ledger = Arc::new(Ledger::new(DashMap::new()));
-        let processor = TransactionProcessor::new(ledger.clone());
+        let ledger = Arc::new(Ledger::new(DashMap::new(), DashSet::new()));
+        let processor = TransactionProcessor::new(ledger.clone(), DashMap::new());
 
         let source_id = ledger.create_account(vec![]).unwrap();
         let dest_id = ledger.create_account(vec![]).unwrap();
@@ -169,8 +178,8 @@ mod tests {
 
     #[test]
     fn test_process_create_account_transaction() {
-        let ledger = Arc::new(Ledger::new(DashMap::new()));
-        let mut processor = TransactionProcessor::new(ledger.clone());
+        let ledger = Arc::new(Ledger::new(DashMap::new(), DashSet::new()));
+        let mut processor = TransactionProcessor::new(ledger.clone(), DashMap::new());
 
         let transaction = Transaction {
             id: Uuid::new_v4(),

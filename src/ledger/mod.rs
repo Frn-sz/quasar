@@ -3,7 +3,7 @@ pub mod interface;
 use {
     crate::{
         ledger::{error::LedgerError, interface::LedgerInterface},
-        models::{Account, HistoricTransfer, Key, TransferInstruction},
+        models::{Account, Key, TransferInstruction},
     },
     chrono::Utc,
     dashmap::{DashMap, DashSet},
@@ -13,20 +13,20 @@ use {
 pub struct Ledger {
     pub accounts: DashMap<Uuid, Account>,
     // To prevent processing the same transaction multiple times (ensure idempotency).
-    processed_transactions: DashSet<Uuid>,
+    pub processed_transactions: DashSet<Uuid>,
 }
 
 impl Default for Ledger {
     fn default() -> Self {
-        Self::new(DashMap::new())
+        Self::new(DashMap::new(), DashSet::new())
     }
 }
 
 impl Ledger {
-    pub fn new(accounts: DashMap<Uuid, Account>) -> Self {
+    pub fn new(accounts: DashMap<Uuid, Account>, processed_transactions: DashSet<Uuid>) -> Self {
         Ledger {
             accounts: accounts,
-            processed_transactions: DashSet::new(),
+            processed_transactions,
         }
     }
 }
@@ -48,23 +48,15 @@ impl LedgerInterface for Ledger {
     fn commit_transfer(
         &self,
         transaction_id: Uuid,
-        instruction: &TransferInstruction,
+        _instruction: &TransferInstruction,
         source_account: &mut Account,
         dest_account: &mut Account,
     ) -> Result<(), LedgerError> {
         // Add instruction to history
-        let timestamp = Utc::now();
-        source_account.transaction_history.push(HistoricTransfer {
-            transaction_id,
-            instruction: instruction.clone(),
-            timestamp,
-        });
+        let _timestamp = Utc::now();
+        source_account.transaction_history.push(transaction_id);
 
-        dest_account.transaction_history.push(HistoricTransfer {
-            transaction_id,
-            instruction: instruction.clone(),
-            timestamp,
-        });
+        dest_account.transaction_history.push(transaction_id);
 
         self.accounts
             .insert(source_account.uuid, source_account.clone());
@@ -108,7 +100,7 @@ mod tests {
 
     #[test]
     fn test_create_account() {
-        let ledger = Ledger::new(DashMap::new());
+        let ledger = Ledger::new(DashMap::new(), DashSet::new());
         let keys = vec![Key::Email("test@test.com".to_string())];
         let account_id_result = ledger.create_account(keys);
         assert!(account_id_result.is_ok());
@@ -120,7 +112,7 @@ mod tests {
 
     #[test]
     fn test_get_existing_account() {
-        let ledger = Ledger::new(DashMap::new());
+        let ledger = Ledger::new(DashMap::new(), DashSet::new());
         let account_id = ledger.create_account(vec![]).unwrap();
         let account_result = ledger.get_account(account_id);
         assert!(account_result.is_ok());
@@ -129,7 +121,7 @@ mod tests {
 
     #[test]
     fn test_commit_transfer_and_is_processed() {
-        let ledger = Ledger::new(DashMap::new());
+        let ledger = Ledger::new(DashMap::new(), DashSet::new());
         let source_id = ledger.create_account(vec![]).unwrap();
         let dest_id = ledger.create_account(vec![]).unwrap();
 
@@ -171,7 +163,7 @@ mod tests {
 
     #[test]
     fn test_mark_transaction_as_processed() {
-        let ledger = Ledger::new(DashMap::new());
+        let ledger = Ledger::new(DashMap::new(), DashSet::new());
         let tx_id = Uuid::new_v4();
 
         assert!(!ledger.is_transaction_processed(tx_id).unwrap());

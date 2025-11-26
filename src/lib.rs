@@ -29,15 +29,15 @@ impl Quasar {
         let persistence = Persistence::new(&config.persistence.db_path)
             .expect("Failed to initialize persistence");
 
-        let accounts = persistence
-            .load_accounts()
-            .expect("Failed to load accounts");
+        let (accounts, transactions, processed_transactions) =
+            persistence.load_state().expect("Failed to load state");
 
-        let ledger = Arc::new(Ledger::new(accounts));
+        let ledger = Arc::new(Ledger::new(accounts, processed_transactions));
 
-        // Cheap clone of Arc
-        let transaction_processor =
-            Arc::new(RwLock::new(TransactionProcessor::new(ledger.clone())));
+        let transaction_processor = Arc::new(RwLock::new(TransactionProcessor::new(
+            ledger.clone(),
+            transactions,
+        )));
 
         Quasar {
             transaction_processor,
@@ -52,7 +52,15 @@ impl Quasar {
         let mut services = tokio::task::JoinSet::new();
         let _logging_guard = init_logging(self.config.debug);
 
-        info!("Initializing with {} accounts", self.ledger.accounts.len());
+        info!(
+            "Initializing with {} accounts and {} transactions",
+            self.ledger.accounts.len(),
+            self.transaction_processor
+                .read()
+                .unwrap()
+                .transactions
+                .len()
+        );
 
         {
             let grpc_processor = Arc::clone(&self.transaction_processor);
@@ -69,9 +77,10 @@ impl Quasar {
                 services.abort_all();
                 tracing::info!("Shutdown signal received, stopping services...");
 
-                self.persistence.save_accounts(&self.ledger.accounts).expect("Failed to save accounts");
+                let tp = self.transaction_processor.read().unwrap();
+                self.persistence.save_state(&self.ledger.accounts, &tp.transactions, &self.ledger.processed_transactions).expect("Failed to save state");
 
-                tracing::info!("Accounts saved successfully");
+                tracing::info!("State saved successfully");
             }
             Some(res) = services.join_next() => {
                 error!("Error in task: {:?}", res);

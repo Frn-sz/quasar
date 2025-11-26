@@ -1,7 +1,6 @@
-use crate::models::Account;
-use dashmap::DashMap;
+use crate::models::{Account, Transaction};
+use dashmap::{DashMap, DashSet};
 use rusqlite::{Connection, Result};
-use std::collections::HashMap;
 use uuid::Uuid;
 
 pub struct Persistence {
@@ -26,12 +25,34 @@ impl Persistence {
             )",
             [],
         )?;
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS transactions (
+                id TEXT PRIMARY KEY,
+                instruction TEXT NOT NULL,
+                status TEXT NOT NULL,
+                timestamp TEXT NOT NULL
+            )",
+            [],
+        )?;
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS processed_transactions (
+                id TEXT PRIMARY KEY
+            )",
+            [],
+        )?;
         Ok(())
     }
 
-    pub fn save_accounts(&mut self, accounts: &DashMap<Uuid, Account>) -> Result<()> {
+    pub fn save_state(
+        &mut self,
+        accounts: &DashMap<Uuid, Account>,
+        transactions: &DashMap<Uuid, Transaction>,
+        processed_transactions: &DashSet<Uuid>,
+    ) -> Result<()> {
         let tx = self.conn.transaction()?;
         tx.execute("DELETE FROM accounts", [])?;
+        tx.execute("DELETE FROM transactions", [])?;
+        tx.execute("DELETE FROM processed_transactions", [])?;
 
         for account in accounts.iter() {
             let keys = serde_json::to_string(&account.keys).unwrap();
@@ -48,10 +69,33 @@ impl Persistence {
             )?;
         }
 
+        for transaction in transactions.iter() {
+            let instruction = serde_json::to_string(&transaction.instruction).unwrap();
+            let status = serde_json::to_string(&transaction.status).unwrap();
+            let timestamp = transaction.timestamp.to_rfc3339();
+
+            tx.execute(
+                "INSERT INTO transactions (id, instruction, status, timestamp) VALUES (?1, ?2, ?3, ?4)",
+                &[
+                    &transaction.id.to_string(),
+                    &instruction,
+                    &status,
+                    &timestamp,
+                ],
+            )?;
+        }
+
+        for transaction_id in processed_transactions.iter() {
+            tx.execute(
+                "INSERT INTO processed_transactions (id) VALUES (?1)",
+                &[&transaction_id.to_string()],
+            )?;
+        }
+
         tx.commit()
     }
 
-    pub fn load_accounts(&self) -> Result<DashMap<Uuid, Account>> {
+    pub fn load_state(&self) -> Result<(DashMap<Uuid, Account>, DashMap<Uuid, Transaction>, DashSet<Uuid>)> {
         let mut stmt = self
             .conn
             .prepare("SELECT uuid, balance, keys, transaction_history FROM accounts")?;
@@ -77,12 +121,54 @@ impl Persistence {
         })?;
 
         let accounts = DashMap::new();
-
         for account in account_iter {
             let (uuid, account) = account?;
             accounts.insert(uuid, account);
         }
 
-        Ok(accounts)
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id, instruction, status, timestamp FROM transactions")?;
+        let transaction_iter = stmt.query_map([], |row| {
+            let id: String = row.get(0)?;
+            let id = Uuid::parse_str(&id).unwrap();
+            let instruction: String = row.get(1)?;
+            let status: String = row.get(2)?;
+            let timestamp: String = row.get(3)?;
+
+            let instruction = serde_json::from_str(&instruction).unwrap();
+            let status = serde_json::from_str(&status).unwrap();
+            let timestamp = timestamp.parse().unwrap();
+
+            Ok((
+                id,
+                Transaction {
+                    id,
+                    instruction,
+                    status,
+                    timestamp,
+                },
+            ))
+        })?;
+
+        let transactions = DashMap::new();
+        for transaction in transaction_iter {
+            let (id, transaction) = transaction?;
+            transactions.insert(id, transaction);
+        }
+
+        let mut stmt = self.conn.prepare("SELECT id FROM processed_transactions")?;
+        let processed_transaction_iter = stmt.query_map([], |row| {
+            let id: String = row.get(0)?;
+            let id = Uuid::parse_str(&id).unwrap();
+            Ok(id)
+        })?;
+
+        let processed_transactions = DashSet::new();
+        for id in processed_transaction_iter {
+            processed_transactions.insert(id?);
+        }
+
+        Ok((accounts, transactions, processed_transactions))
     }
 }
