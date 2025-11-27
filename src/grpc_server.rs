@@ -10,11 +10,7 @@ use {
             interface::{TransactionProcessorInterface, TransactionResult},
         },
     },
-    std::{
-        convert::TryFrom,
-        str::FromStr,
-        sync::{Arc, RwLock},
-    },
+    std::{convert::TryFrom, str::FromStr, sync::Arc},
     tonic::{Request, Response, Status, transport::Server},
     tracing::{error, info},
     uuid::Uuid,
@@ -31,7 +27,7 @@ use server::{
 };
 
 pub struct QuasarGrpcServer {
-    processor: Arc<RwLock<TransactionProcessor>>,
+    processor: Arc<TransactionProcessor>,
 }
 
 impl TryFrom<TransferRequest> for Transaction {
@@ -110,9 +106,8 @@ impl GrpcService for QuasarGrpcServer {
         request: Request<CreateAccountRequest>,
     ) -> Result<Response<CreateAccountResponse>, Status> {
         let domain_transaction = request.into_inner().try_into()?;
-        let mut processor = self.processor.write().unwrap();
 
-        match processor.process_transaction(domain_transaction) {
+        match self.processor.process_transaction(domain_transaction) {
             Ok(TransactionResult::AccountCreated(id)) => {
                 info!("Successfully processed create_account request");
                 Ok(Response::new(CreateAccountResponse {
@@ -135,9 +130,8 @@ impl GrpcService for QuasarGrpcServer {
         request: Request<TransferRequest>,
     ) -> Result<Response<GenericResponse>, Status> {
         let domain_transaction = request.into_inner().try_into()?;
-        let mut processor = self.processor.write().unwrap();
 
-        match processor.process_transaction(domain_transaction) {
+        match self.processor.process_transaction(domain_transaction) {
             Ok(TransactionResult::Success) => {
                 info!("Successfully processed transfer request");
                 Ok(Response::new(GenericResponse {
@@ -158,9 +152,8 @@ impl GrpcService for QuasarGrpcServer {
         request: Request<DepositRequest>,
     ) -> Result<Response<GenericResponse>, Status> {
         let domain_transaction = request.into_inner().try_into()?;
-        let mut processor = self.processor.write().unwrap();
 
-        match processor.process_transaction(domain_transaction) {
+        match self.processor.process_transaction(domain_transaction) {
             Ok(TransactionResult::Success) => {
                 info!("Successfully processed deposit request");
                 Ok(Response::new(GenericResponse {
@@ -181,9 +174,8 @@ impl GrpcService for QuasarGrpcServer {
         request: Request<GetBalanceRequest>,
     ) -> Result<Response<GetBalanceResponse>, Status> {
         let domain_transaction = request.into_inner().try_into()?;
-        let mut processor = self.processor.write().unwrap();
 
-        match processor.process_transaction(domain_transaction) {
+        match self.processor.process_transaction(domain_transaction) {
             Ok(TransactionResult::Balance(amount)) => {
                 info!("Successfully processed get_balance request");
                 Ok(Response::new(GetBalanceResponse {
@@ -204,7 +196,7 @@ impl GrpcService for QuasarGrpcServer {
 
 pub async fn start_grpc_service(
     config: GrpcConfig,
-    processor: Arc<RwLock<TransactionProcessor>>,
+    processor: Arc<TransactionProcessor>,
     mut shutdown_receiver: tokio::sync::broadcast::Receiver<()>,
 ) {
     let address = format!("{}:{}", config.address, config.port);

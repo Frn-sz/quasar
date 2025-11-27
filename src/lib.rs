@@ -3,7 +3,7 @@ use {
         grpc_server::start_grpc_service, ledger::Ledger, logging::init_logging,
         persistence::Persistence, transaction_processor::TransactionProcessor,
     },
-    std::sync::{Arc, RwLock},
+    std::sync::Arc,
     tokio::signal::ctrl_c,
     tracing::{error, info},
 };
@@ -18,7 +18,7 @@ pub mod persistence;
 pub mod transaction_processor;
 
 pub struct Quasar {
-    pub transaction_processor: Arc<RwLock<TransactionProcessor>>,
+    pub transaction_processor: Arc<TransactionProcessor>,
     pub config: config::QuasarServerConfig,
     pub persistence: Persistence,
     ledger: Arc<Ledger>,
@@ -34,10 +34,8 @@ impl Quasar {
 
         let ledger = Arc::new(Ledger::new(accounts, processed_transactions));
 
-        let transaction_processor = Arc::new(RwLock::new(TransactionProcessor::new(
-            ledger.clone(),
-            transactions,
-        )));
+        let transaction_processor =
+            Arc::new(TransactionProcessor::new(ledger.clone(), transactions));
 
         Quasar {
             transaction_processor,
@@ -55,11 +53,7 @@ impl Quasar {
         info!(
             "Initializing with {} accounts and {} transactions",
             self.ledger.accounts.len(),
-            self.transaction_processor
-                .read()
-                .unwrap()
-                .transactions
-                .len()
+            self.transaction_processor.transactions.len()
         );
 
         {
@@ -77,8 +71,7 @@ impl Quasar {
                 services.abort_all();
                 tracing::info!("Shutdown signal received, stopping services...");
 
-                let tp = self.transaction_processor.read().unwrap();
-                self.persistence.save_state(&self.ledger.accounts, &tp.transactions, &self.ledger.processed_transactions).expect("Failed to save state");
+                self.persistence.save_state(&self.ledger.accounts, &self.transaction_processor.transactions, &self.ledger.processed_transactions).expect("Failed to save state");
 
                 tracing::info!("State saved successfully");
             }

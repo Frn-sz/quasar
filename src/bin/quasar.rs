@@ -1,7 +1,7 @@
 use {
     clap::Parser,
     quasar::{Quasar, config::QuasarServerConfig},
-    tracing::error,
+    tracing::{error, info},
 };
 
 #[derive(Parser)]
@@ -16,11 +16,11 @@ async fn main() {
     let config = match QuasarServerConfig::from_file(&cli.config) {
         Ok(config) => config,
         Err(e) => {
-            error!("Error: failed to load server config file: {e}");
+            eprintln!("Error: failed to load server config file: {e}");
             return;
         }
     };
-
+    println!("Config loaded");
     let mut app = Quasar::new(config);
 
     if let Err(e) = app.run().await {

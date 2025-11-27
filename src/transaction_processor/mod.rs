@@ -111,10 +111,12 @@ impl TransactionProcessor {
 
 impl TransactionProcessorInterface for TransactionProcessor {
     fn process_transaction(
-        &mut self,
+        &self,
         transaction: Transaction,
     ) -> Result<TransactionResult, TransactionProcessorError> {
-        self.transactions.insert(transaction.id, transaction.clone());
+        self.transactions
+            .insert(transaction.id, transaction.clone());
+
         match transaction.instruction {
             Instruction::Transfer(inst) => self.process_transfer(transaction.id, inst),
             Instruction::CreateAccount(inst) => self.process_create_account(transaction.id, inst),
@@ -179,7 +181,7 @@ mod tests {
     #[test]
     fn test_process_create_account_transaction() {
         let ledger = Arc::new(Ledger::new(DashMap::new(), DashSet::new()));
-        let mut processor = TransactionProcessor::new(ledger.clone(), DashMap::new());
+        let processor = TransactionProcessor::new(ledger.clone(), DashMap::new());
 
         let transaction = Transaction {
             id: Uuid::new_v4(),
@@ -198,7 +200,7 @@ mod tests {
 
     #[test]
     fn test_process_successful_transfer() {
-        let (mut processor, ledger, source_id, dest_id) = setup_for_transfer();
+        let (processor, ledger, source_id, dest_id) = setup_for_transfer();
 
         let transaction = Transaction {
             id: Uuid::new_v4(),
@@ -223,7 +225,7 @@ mod tests {
 
     #[test]
     fn test_process_transfer_insufficient_funds() {
-        let (mut processor, _, source_id, dest_id) = setup_for_transfer();
+        let (processor, _, source_id, dest_id) = setup_for_transfer();
 
         let transaction = Transaction {
             id: Uuid::new_v4(),
