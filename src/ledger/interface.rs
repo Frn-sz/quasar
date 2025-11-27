@@ -1,7 +1,7 @@
 use {
     crate::{
         ledger::error::LedgerError,
-        models::{Account, Key, TransferInstruction},
+        models::{Account, Key},
     },
     uuid::Uuid,
 };
@@ -14,12 +14,12 @@ pub trait LedgerInterface {
     fn get_account(&self, id: Uuid) -> Result<Account, LedgerError>;
 
     /// Atomically commits the state changes for a transfer instruction.
-    fn commit_transfer(
+    fn transfer(
         &self,
         transaction_id: Uuid,
-        instruction: &TransferInstruction,
-        source_account: &mut Account,
-        dest_account: &mut Account,
+        source_id: Uuid,
+        dest_id: Uuid,
+        amount: u64,
     ) -> Result<(), LedgerError>;
 
     /// Checks if a transaction ID has already been processed.

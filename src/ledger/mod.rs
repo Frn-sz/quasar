@@ -3,9 +3,8 @@ pub mod interface;
 use {
     crate::{
         ledger::{error::LedgerError, interface::LedgerInterface},
-        models::{Account, Key, TransferInstruction},
+        models::{Account, Key},
     },
-    chrono::Utc,
     dashmap::{DashMap, DashSet},
     uuid::Uuid,
 };
@@ -45,24 +44,36 @@ impl LedgerInterface for Ledger {
         }
     }
 
-    fn commit_transfer(
+    fn transfer(
         &self,
         transaction_id: Uuid,
-        _instruction: &TransferInstruction,
-        source_account: &mut Account,
-        dest_account: &mut Account,
+        source_id: Uuid,
+        dest_id: Uuid,
+        amount: u64,
     ) -> Result<(), LedgerError> {
-        // Add instruction to history
-        let _timestamp = Utc::now();
-        source_account.transaction_history.push(transaction_id);
+        {
+            let mut source = self
+                .accounts
+                .get_mut(&source_id)
+                .ok_or(LedgerError::AccountNotFound)?;
 
-        dest_account.transaction_history.push(transaction_id);
+            if source.balance < amount {
+                return Err(LedgerError::InsufficientFunds);
+            }
 
-        self.accounts
-            .insert(source_account.uuid, source_account.clone());
+            source.balance -= amount;
+            source.transaction_history.push(transaction_id);
+        }
 
-        self.accounts
-            .insert(dest_account.uuid, dest_account.clone());
+        {
+            let mut dest = self
+                .accounts
+                .get_mut(&dest_id)
+                .ok_or(LedgerError::AccountNotFound)?;
+
+            dest.balance += amount;
+            dest.transaction_history.push(transaction_id);
+        }
 
         self.processed_transactions.insert(transaction_id);
 
@@ -92,11 +103,7 @@ impl LedgerInterface for Ledger {
 
 #[cfg(test)]
 mod tests {
-    use {
-        super::*,
-        crate::models::{Key, TransferInstruction},
-        uuid::Uuid,
-    };
+    use {super::*, crate::models::Key, uuid::Uuid};
 
     #[test]
     fn test_create_account() {
@@ -130,24 +137,17 @@ mod tests {
         source_account.balance = 50;
         dest_account.balance = 150;
 
+        ledger.accounts.insert(source_id, source_account);
+        ledger.accounts.insert(dest_id, dest_account);
+
         let transaction_id = Uuid::new_v4();
-        let instruction = TransferInstruction {
-            source_account_id: source_id,
-            destination_account_id: dest_id,
-            amount: 50,
-        };
 
         // Before commit
         assert!(!ledger.is_transaction_processed(transaction_id).unwrap());
 
         // Commit
-        let commit_result = ledger.commit_transfer(
-            transaction_id,
-            &instruction,
-            &mut source_account,
-            &mut dest_account,
-        );
-        assert!(commit_result.is_ok());
+        let transfer_result = ledger.transfer(transaction_id, source_id, dest_id, 50);
+        assert!(transfer_result.is_ok());
 
         // After commit
         assert!(ledger.is_transaction_processed(transaction_id).unwrap());
@@ -155,8 +155,8 @@ mod tests {
         let final_source_account = ledger.get_account(source_id).unwrap();
         let final_dest_account = ledger.get_account(dest_id).unwrap();
 
-        assert_eq!(final_source_account.balance, 50);
-        assert_eq!(final_dest_account.balance, 150);
+        assert_eq!(final_source_account.balance, 0);
+        assert_eq!(final_dest_account.balance, 200);
         assert_eq!(final_source_account.transaction_history.len(), 1);
         assert_eq!(final_dest_account.transaction_history.len(), 1);
     }

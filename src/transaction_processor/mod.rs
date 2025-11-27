@@ -6,7 +6,7 @@ pub mod interface;
 
 use {
     crate::{
-        ledger::interface::LedgerInterface,
+        ledger::{error::LedgerError, interface::LedgerInterface},
         models::{
             CreateAccountInstruction, DepositInstruction, Instruction, Transaction,
             TransferInstruction,
@@ -46,24 +46,14 @@ impl TransactionProcessor {
             return Err(TransactionProcessorError::TransactionAlreadyProcessed);
         }
 
-        let mut source_account = self.ledger.get_account(instruction.source_account_id)?;
-        let mut dest_account = self
-            .ledger
-            .get_account(instruction.destination_account_id)?;
-
-        if source_account.balance < instruction.amount {
-            return Err(TransactionProcessorError::InsufficientFunds);
-        }
-
-        source_account.balance = source_account.balance.saturating_sub(instruction.amount);
-        dest_account.balance = dest_account.balance.saturating_add(instruction.amount);
-
-        self.ledger.commit_transfer(
-            transaction_id,
-            &instruction,
-            &mut source_account,
-            &mut dest_account,
-        )?;
+        self.ledger
+            .transfer(
+                transaction_id,
+                instruction.source_account_id,
+                instruction.destination_account_id,
+                instruction.amount,
+            )
+            .map_err(TransactionProcessorError::LedgerError)?;
 
         Ok(TransactionResult::Success)
     }
@@ -156,23 +146,15 @@ mod tests {
         let dest_id = ledger.create_account(vec![]).unwrap();
 
         let mut source_account = ledger.get_account(source_id).unwrap();
-        source_account.balance = 1000;
-        let mut dest_account = ledger.get_account(dest_id).unwrap();
 
-        let transfer_inst = TransferInstruction {
-            source_account_id: source_id,
-            destination_account_id: dest_id,
-            amount: 0,
-        };
+        source_account.balance = 1000;
+
+        // Update ledger with the updated source account
+        ledger.accounts.insert(source_id, source_account);
 
         // Initial commit to set the balance
         ledger
-            .commit_transfer(
-                Uuid::new_v4(),
-                &transfer_inst,
-                &mut source_account,
-                &mut dest_account,
-            )
+            .transfer(Uuid::new_v4(), source_id, dest_id, 100)
             .unwrap();
 
         (processor, ledger, source_id, dest_id)
@@ -219,8 +201,8 @@ mod tests {
         let source_account = ledger.get_account(source_id).unwrap();
         let dest_account = ledger.get_account(dest_id).unwrap();
 
-        assert_eq!(source_account.balance, 900);
-        assert_eq!(dest_account.balance, 100);
+        assert_eq!(source_account.balance, 800);
+        assert_eq!(dest_account.balance, 200);
     }
 
     #[test]
@@ -232,7 +214,7 @@ mod tests {
             instruction: Instruction::Transfer(TransferInstruction {
                 source_account_id: source_id,
                 destination_account_id: dest_id,
-                amount: 2000, // More than available balance
+                amount: 20000, // More than available balance
             }),
             timestamp: Utc::now(),
             status: TransactionStatus::Pending,
@@ -242,7 +224,7 @@ mod tests {
         assert!(result.is_err());
         assert!(matches!(
             result.err().unwrap(),
-            TransactionProcessorError::InsufficientFunds
+            TransactionProcessorError::LedgerError(LedgerError::InsufficientFunds)
         ));
     }
 }
