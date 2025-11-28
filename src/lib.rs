@@ -1,10 +1,10 @@
 use {
     crate::{
-        grpc_server::start_grpc_service, grpc_server::start_grpc_service, ledger::Ledger,
-        logging::init_logging, logging::init_logging, metrics::handler::start_metrics_pusher,
-        persistence::Persistence, transaction_processor::TransactionProcessor,
+        grpc_server::start_grpc_service, ledger::Ledger, logging::init_logging,
+        metrics::handler::start_metrics_pusher, persistence::Persistence,
+        transaction_processor::TransactionProcessor,
     },
-    std::sync::{Arc, RwLock},
+    std::sync::Arc,
     tokio::signal::ctrl_c,
     tracing::{error, info},
 };
@@ -21,24 +21,24 @@ pub mod persistence;
 pub mod transaction_processor;
 
 pub struct Quasar {
-    pub transaction_processor: Arc<RwLock<TransactionProcessor>>,
+    pub transaction_processor: Arc<TransactionProcessor>,
     pub config: config::QuasarServerConfig,
     pub persistence: Persistence,
-    ledger: Arc<RwLock<Ledger>>,
+    ledger: Arc<Ledger>,
 }
 
 impl Quasar {
     pub fn new(config: config::QuasarServerConfig) -> Self {
         let persistence = Persistence::new(&config.persistence.db_path)
             .expect("Failed to initialize persistence");
-        let accounts = persistence
-            .load_accounts()
-            .expect("Failed to load accounts");
-        let ledger = Arc::new(RwLock::new(Ledger::new(accounts)));
 
-        // Cheap clone of Arc
+        let (accounts, transactions, processed_transactions) =
+            persistence.load_state().expect("Failed to load state");
+
+        let ledger = Arc::new(Ledger::new(accounts, processed_transactions));
+
         let transaction_processor =
-            Arc::new(RwLock::new(TransactionProcessor::new(ledger.clone())));
+            Arc::new(TransactionProcessor::new(ledger.clone(), transactions));
 
         Quasar {
             transaction_processor,
@@ -57,13 +57,10 @@ impl Quasar {
         let metrics_config = self.config.metrics.clone();
         let shutdown_receiver = shutdown_sender.subscribe();
 
+        info!("Initializing with {} accounts", self.ledger.accounts.len());
+
         // TODO: add REST API service here
         {
-            info!(
-                "Initializing with {} accounts",
-                self.ledger.read().unwrap().accounts.read().unwrap().len()
-            );
-
             services.spawn(async move {
                 start_metrics_pusher(metrics_config, shutdown_receiver).await;
             });
@@ -85,10 +82,9 @@ impl Quasar {
                 services.abort_all();
                 tracing::info!("Shutdown signal received, stopping services...");
 
-                let accounts = self.ledger.read().unwrap().accounts.read().unwrap().clone();
-                self.persistence.save_accounts(&accounts).expect("Failed to save accounts");
+                self.persistence.save_state(&self.ledger.accounts, &self.transaction_processor.transactions, &self.ledger.processed_transactions).expect("Failed to save state");
 
-                tracing::info!("Accounts saved successfully");
+                tracing::info!("State saved successfully");
             }
             Some(res) = services.join_next() => {
                 error!("Error in task: {:?}", res);

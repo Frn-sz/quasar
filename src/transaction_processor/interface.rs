@@ -10,7 +10,7 @@ pub enum TransactionResult {
 pub trait TransactionProcessorInterface {
     /// Processes a transaction and commits it to the ledger.
     fn process_transaction(
-        &mut self,
+        &self,
         transaction: crate::models::Transaction,
     ) -> Result<TransactionResult, TransactionProcessorError>;
 }

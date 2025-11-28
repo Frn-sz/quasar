@@ -16,12 +16,10 @@ async fn main() {
     let config = match QuasarServerConfig::from_file(&cli.config) {
         Ok(config) => config,
         Err(e) => {
-            error!("Error: failed to load server config file: {e}");
+            eprintln!("Error: failed to load server config file: {e}");
             return;
         }
     };
-
-    let _profiler = dhat::Profiler::new_heap();
 
     let mut app = Quasar::new(config);
 

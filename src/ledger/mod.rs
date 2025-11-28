@@ -4,167 +4,124 @@ use {
     crate::{
         ledger::{error::LedgerError, interface::LedgerInterface},
         metrics::ACCOUNTS_CREATED_TOTAL,
-        models::{Account, HistoricTransfer, Key, TransferInstruction},
+        models::{Account, Key},
     },
-    chrono::Utc,
-    std::{
-        collections::{HashMap, HashSet},
-        sync::RwLock,
-    },
+    dashmap::{DashMap, DashSet},
     uuid::Uuid,
 };
 
 pub struct Ledger {
-    // For now using a global lock for baseline implementation; must be optimized later.
-    pub accounts: RwLock<HashMap<Uuid, Account>>,
+    pub accounts: DashMap<Uuid, Account>,
     // To prevent processing the same transaction multiple times (ensure idempotency).
-    processed_transactions: RwLock<HashSet<Uuid>>,
+    pub processed_transactions: DashSet<Uuid>,
 }
 
 impl Default for Ledger {
     fn default() -> Self {
-        Self::new(HashMap::new())
+        Self::new(DashMap::new(), DashSet::new())
     }
 }
 
 impl Ledger {
-    pub fn new(accounts: HashMap<Uuid, Account>) -> Self {
+    pub fn new(accounts: DashMap<Uuid, Account>, processed_transactions: DashSet<Uuid>) -> Self {
         Ledger {
-            accounts: RwLock::new(accounts),
-            processed_transactions: RwLock::new(HashSet::new()),
+            accounts: accounts,
+            processed_transactions,
         }
-    }
-
-    fn acquire_accounts_write_lock(
-        &self,
-    ) -> Result<std::sync::RwLockWriteGuard<'_, HashMap<Uuid, Account>>, LedgerError> {
-        self.accounts
-            .write()
-            .map_err(|_| LedgerError::FailedToAcquireAccountsWriteLock)
-    }
-
-    fn acquire_accounts_read_lock(
-        &self,
-    ) -> Result<std::sync::RwLockReadGuard<'_, HashMap<Uuid, Account>>, LedgerError> {
-        self.accounts
-            .read()
-            .map_err(|_| LedgerError::FailedToAcquireAccountsReadLock)
-    }
-
-    fn acquire_transactions_write_lock(
-        &self,
-    ) -> Result<std::sync::RwLockWriteGuard<'_, HashSet<Uuid>>, LedgerError> {
-        self.processed_transactions
-            .write()
-            .map_err(|_| LedgerError::FailedToAcquireTransactionsWriteLock)
-    }
-
-    fn acquire_transactions_read_lock(
-        &self,
-    ) -> Result<std::sync::RwLockReadGuard<'_, HashSet<Uuid>>, LedgerError> {
-        self.processed_transactions
-            .read()
-            .map_err(|_| LedgerError::FailedToAcquireTransactionsReadLock)
     }
 }
 
 impl LedgerInterface for Ledger {
-    fn create_account(&mut self, keys: Vec<Key>) -> Result<Uuid, LedgerError> {
-        let mut accounts = self.acquire_accounts_write_lock()?;
+    fn create_account(&self, keys: Vec<Key>) -> Result<Uuid, LedgerError> {
         let (account_id, account) = Account::new(keys);
-        accounts.insert(account_id, account);
+        self.accounts.insert(account_id, account);
         ACCOUNTS_CREATED_TOTAL.inc();
         Ok(account_id)
     }
 
     fn get_account(&self, id: Uuid) -> Result<Account, LedgerError> {
-        let accounts = self.acquire_accounts_read_lock()?;
-
-        accounts
-            .get(&id)
-            .cloned()
-            .ok_or(LedgerError::AccountNotFound)
+        match self.accounts.get(&id) {
+            Some(entry) => Ok(entry.value().clone()),
+            None => Err(LedgerError::AccountNotFound),
+        }
     }
 
-    fn commit_transfer(
-        &mut self,
+    fn transfer(
+        &self,
         transaction_id: Uuid,
-        instruction: &TransferInstruction,
-        source_account: &mut Account,
-        dest_account: &mut Account,
+        source_id: Uuid,
+        dest_id: Uuid,
+        amount: u64,
     ) -> Result<(), LedgerError> {
-        let mut accounts = self.acquire_accounts_write_lock()?;
-        let mut processed_transactions = self.acquire_transactions_write_lock()?;
+        {
+            let mut source = self
+                .accounts
+                .get_mut(&source_id)
+                .ok_or(LedgerError::AccountNotFound)?;
 
-        // Add instruction to history
-        let timestamp = Utc::now();
-        source_account.transaction_history.push(HistoricTransfer {
-            transaction_id,
-            instruction: instruction.clone(),
-            timestamp,
-        });
+            if source.balance < amount {
+                return Err(LedgerError::InsufficientFunds);
+            }
 
-        dest_account.transaction_history.push(HistoricTransfer {
-            transaction_id,
-            instruction: instruction.clone(),
-            timestamp,
-        });
+            source.balance -= amount;
+            source.transaction_history.push(transaction_id);
+        }
 
-        accounts.insert(source_account.uuid, source_account.clone());
-        accounts.insert(dest_account.uuid, dest_account.clone());
+        {
+            let mut dest = self
+                .accounts
+                .get_mut(&dest_id)
+                .ok_or(LedgerError::AccountNotFound)?;
 
-        processed_transactions.insert(transaction_id);
+            dest.balance += amount;
+            dest.transaction_history.push(transaction_id);
+        }
+
+        self.processed_transactions.insert(transaction_id);
 
         Ok(())
     }
 
     fn is_transaction_processed(&self, transaction_id: Uuid) -> Result<bool, LedgerError> {
-        let processed_transactions = self.acquire_transactions_read_lock()?;
-        Ok(processed_transactions.contains(&transaction_id))
+        Ok(self.processed_transactions.contains(&transaction_id))
     }
 
-    fn mark_transaction_processed(&mut self, transaction_id: Uuid) -> Result<(), LedgerError> {
-        let mut processed_transactions = self.acquire_transactions_write_lock()?;
-        processed_transactions.insert(transaction_id);
+    fn mark_transaction_processed(&self, transaction_id: Uuid) -> Result<(), LedgerError> {
+        self.processed_transactions.insert(transaction_id);
         Ok(())
     }
 
-    fn deposit_into_account(&mut self, account_id: Uuid, amount: u64) -> Result<(), LedgerError> {
-        let mut accounts = self.acquire_accounts_write_lock()?;
-        let account = accounts
+    fn deposit_into_account(&self, account_id: Uuid, amount: u64) -> Result<(), LedgerError> {
+        let mut account = self
+            .accounts
             .get_mut(&account_id)
             .ok_or(LedgerError::AccountNotFound)?;
 
         account.balance = account.balance.saturating_add(amount);
+
         Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use {
-        super::*,
-        crate::models::{Key, TransferInstruction},
-        std::collections::HashMap,
-        uuid::Uuid,
-    };
+    use {super::*, crate::models::Key, uuid::Uuid};
 
     #[test]
     fn test_create_account() {
-        let mut ledger = Ledger::new(HashMap::new());
+        let ledger = Ledger::new(DashMap::new(), DashSet::new());
         let keys = vec![Key::Email("test@test.com".to_string())];
         let account_id_result = ledger.create_account(keys);
         assert!(account_id_result.is_ok());
         let account_id = account_id_result.unwrap();
 
-        let accounts_lock = ledger.accounts.read().unwrap();
-        assert!(accounts_lock.contains_key(&account_id));
-        assert_eq!(accounts_lock.get(&account_id).unwrap().keys.len(), 1);
+        assert!(ledger.accounts.contains_key(&account_id));
+        assert_eq!(ledger.accounts.get(&account_id).unwrap().keys.len(), 1);
     }
 
     #[test]
     fn test_get_existing_account() {
-        let mut ledger = Ledger::new(HashMap::new());
+        let ledger = Ledger::new(DashMap::new(), DashSet::new());
         let account_id = ledger.create_account(vec![]).unwrap();
         let account_result = ledger.get_account(account_id);
         assert!(account_result.is_ok());
@@ -173,7 +130,7 @@ mod tests {
 
     #[test]
     fn test_commit_transfer_and_is_processed() {
-        let mut ledger = Ledger::new(HashMap::new());
+        let ledger = Ledger::new(DashMap::new(), DashSet::new());
         let source_id = ledger.create_account(vec![]).unwrap();
         let dest_id = ledger.create_account(vec![]).unwrap();
 
@@ -182,24 +139,17 @@ mod tests {
         source_account.balance = 50;
         dest_account.balance = 150;
 
+        ledger.accounts.insert(source_id, source_account);
+        ledger.accounts.insert(dest_id, dest_account);
+
         let transaction_id = Uuid::new_v4();
-        let instruction = TransferInstruction {
-            source_account_id: source_id,
-            destination_account_id: dest_id,
-            amount: 50,
-        };
 
         // Before commit
         assert!(!ledger.is_transaction_processed(transaction_id).unwrap());
 
         // Commit
-        let commit_result = ledger.commit_transfer(
-            transaction_id,
-            &instruction,
-            &mut source_account,
-            &mut dest_account,
-        );
-        assert!(commit_result.is_ok());
+        let transfer_result = ledger.transfer(transaction_id, source_id, dest_id, 50);
+        assert!(transfer_result.is_ok());
 
         // After commit
         assert!(ledger.is_transaction_processed(transaction_id).unwrap());
@@ -207,15 +157,15 @@ mod tests {
         let final_source_account = ledger.get_account(source_id).unwrap();
         let final_dest_account = ledger.get_account(dest_id).unwrap();
 
-        assert_eq!(final_source_account.balance, 50);
-        assert_eq!(final_dest_account.balance, 150);
+        assert_eq!(final_source_account.balance, 0);
+        assert_eq!(final_dest_account.balance, 200);
         assert_eq!(final_source_account.transaction_history.len(), 1);
         assert_eq!(final_dest_account.transaction_history.len(), 1);
     }
 
     #[test]
     fn test_mark_transaction_as_processed() {
-        let mut ledger = Ledger::new(HashMap::new());
+        let ledger = Ledger::new(DashMap::new(), DashSet::new());
         let tx_id = Uuid::new_v4();
 
         assert!(!ledger.is_transaction_processed(tx_id).unwrap());

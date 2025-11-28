@@ -14,4 +14,6 @@ pub enum LedgerError {
     AccountNotFound,
     #[error("Transaction has already been processed")]
     TransactionAlreadyProcessed,
+    #[error("Insufficient funds")]
+    InsufficientFunds,
 }

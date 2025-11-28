@@ -1,6 +1,7 @@
-use prometheus::{Counter, Histogram};
-
-use crate::metrics::handler::{counter, histogram_fast_ops, histogram_slow_ops};
+use {
+    crate::metrics::handler::{counter, histogram_fast_ops, histogram_slow_ops},
+    prometheus::{Counter, Histogram},
+};
 pub mod handler;
 lazy_static::lazy_static!(
     pub static ref TRANSACTIONS_PROCESSED_TOTAL: Counter =

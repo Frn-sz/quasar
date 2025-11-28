@@ -1,6 +1,6 @@
-use serde::{Deserialize, Serialize};
 use {
     chrono::{DateTime, Utc},
+    serde::{Deserialize, Serialize},
     uuid::Uuid,
 };
 
@@ -65,22 +65,14 @@ pub struct GetBalanceInstruction {
     pub account_id: Uuid,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HistoricTransfer {
-    pub transaction_id: Uuid,
-    pub instruction: TransferInstruction,
-    pub timestamp: DateTime<Utc>,
-}
-
 /// Account is very simplified, since we don't really care about user data
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct Account {
     pub uuid: Uuid,
     pub balance: u64,
     pub keys: Vec<Key>,
-    // For now using this naive approach; must be optimized later.
-    // This leads to data duplication and bad CPU cache locality.
-    pub transaction_history: Vec<HistoricTransfer>,
+    // Using indirection to avoid data duplication. The vector stores transaction IDs.
+    pub transaction_history: Vec<Uuid>,
 }
 
 impl Account {

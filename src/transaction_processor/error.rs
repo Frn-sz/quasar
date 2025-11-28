@@ -3,7 +3,7 @@ use {crate::ledger::error::LedgerError, thiserror::Error};
 #[derive(Debug, Error)]
 pub enum TransactionProcessorError {
     #[error("Ledger error: {0}")]
-    Ledger(#[from] LedgerError),
+    LedgerError(#[from] LedgerError),
     #[error("Transaction has already been processed")]
     TransactionAlreadyProcessed,
     #[error("Insufficient funds for the transaction")]
