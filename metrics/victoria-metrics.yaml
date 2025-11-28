@@ -1,0 +1,7 @@
+global:
+  scrape_interval: 10s
+
+scrape_configs:
+  - job_name: 'quasar-service'
+    static_configs:
+      - targets: ['quasar:3000']

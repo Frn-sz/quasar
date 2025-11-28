@@ -6,7 +6,12 @@ pub mod interface;
 
 use {
     crate::{
-        ledger::{error::LedgerError, interface::LedgerInterface},
+        ledger::interface::LedgerInterface,
+        metrics::{
+            ACCOUNT_CREATION_TIME_SECONDS, DEPOSIT_TIME_SECONDS, GET_BALANCE_TIME_SECONDS,
+            TRANSACTION_PROCESSING_TIME_SECONDS, TRANSACTIONS_PROCESSED_TOTAL,
+            TRANSFER_TIME_SECONDS,
+        },
         models::{
             CreateAccountInstruction, DepositInstruction, Instruction, Transaction,
             TransferInstruction,
@@ -106,17 +111,29 @@ impl TransactionProcessorInterface for TransactionProcessor {
     ) -> Result<TransactionResult, TransactionProcessorError> {
         self.transactions
             .insert(transaction.id, transaction.clone());
-
-        match transaction.instruction {
-            Instruction::Transfer(inst) => self.process_transfer(transaction.id, inst),
-            Instruction::CreateAccount(inst) => self.process_create_account(transaction.id, inst),
-            Instruction::Deposit(deposit_instruction) => {
-                self.process_deposit(transaction.id, deposit_instruction)
+        TRANSACTIONS_PROCESSED_TOTAL.inc();
+        measure!(TRANSACTION_PROCESSING_TIME_SECONDS, {
+            match transaction.instruction {
+                Instruction::Transfer(inst) => measure!(TRANSFER_TIME_SECONDS, {
+                    self.process_transfer(transaction.id, inst)
+                }),
+                Instruction::CreateAccount(inst) => {
+                    measure!(ACCOUNT_CREATION_TIME_SECONDS, {
+                        self.process_create_account(transaction.id, inst)
+                    })
+                }
+                Instruction::Deposit(deposit_instruction) => {
+                    measure!(DEPOSIT_TIME_SECONDS, {
+                        self.process_deposit(transaction.id, deposit_instruction)
+                    })
+                }
+                Instruction::GetBalance(get_balance_instruction) => {
+                    measure!(GET_BALANCE_TIME_SECONDS, {
+                        self.get_balance(get_balance_instruction.account_id)
+                    })
+                }
             }
-            Instruction::GetBalance(get_balance_instruction) => {
-                self.get_balance(get_balance_instruction.account_id)
-            }
-        }
+        })
     }
 }
 
@@ -125,7 +142,7 @@ mod tests {
     use {
         super::*,
         crate::{
-            ledger::Ledger,
+            ledger::{Ledger, error::LedgerError},
             models::{CreateAccountInstruction, Key, TransactionStatus},
         },
         chrono::Utc,

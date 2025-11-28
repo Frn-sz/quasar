@@ -1,7 +1,8 @@
 use {
     crate::{
         grpc_server::start_grpc_service, ledger::Ledger, logging::init_logging,
-        persistence::Persistence, transaction_processor::TransactionProcessor,
+        metrics::handler::start_metrics_pusher, persistence::Persistence,
+        transaction_processor::TransactionProcessor,
     },
     std::sync::Arc,
     tokio::signal::ctrl_c,
@@ -12,6 +13,8 @@ pub mod config;
 pub mod grpc_server;
 pub mod ledger;
 pub mod logging;
+#[macro_use]
+pub mod macros;
 pub mod metrics;
 pub mod models;
 pub mod persistence;
@@ -50,12 +53,20 @@ impl Quasar {
         let mut services = tokio::task::JoinSet::new();
         let _logging_guard = init_logging(self.config.debug);
 
-        info!(
-            "Initializing with {} accounts and {} transactions",
-            self.ledger.accounts.len(),
-            self.transaction_processor.transactions.len()
-        );
+        // Metrics pusher service
+        let metrics_config = self.config.metrics.clone();
+        let shutdown_receiver = shutdown_sender.subscribe();
 
+        info!("Initializing with {} accounts", self.ledger.accounts.len());
+
+        // TODO: add REST API service here
+        {
+            services.spawn(async move {
+                start_metrics_pusher(metrics_config, shutdown_receiver).await;
+            });
+        }
+
+        // gRPC service
         {
             let grpc_processor = Arc::clone(&self.transaction_processor);
             let grpc_config = self.config.grpc.clone();

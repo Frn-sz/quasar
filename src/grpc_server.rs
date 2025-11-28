@@ -110,17 +110,22 @@ impl GrpcService for QuasarGrpcServer {
         match self.processor.process_transaction(domain_transaction) {
             Ok(TransactionResult::AccountCreated(id)) => {
                 info!("Successfully processed create_account request");
+
                 Ok(Response::new(CreateAccountResponse {
                     success: true,
                     created_account_id: id.to_string(),
                     error_message: String::new(),
                 }))
             }
-            Err(e) => Ok(Response::new(CreateAccountResponse {
-                success: false,
-                error_message: e.to_string(),
-                ..Default::default()
-            })),
+            Err(e) => {
+                error!("Failed to process create_account request: {}", e);
+
+                Ok(Response::new(CreateAccountResponse {
+                    success: false,
+                    error_message: e.to_string(),
+                    ..Default::default()
+                }))
+            }
             _ => Err(Status::internal("Unexpected processor result")),
         }
     }

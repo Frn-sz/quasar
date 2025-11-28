@@ -1,7 +1,9 @@
-use crate::models::{Account, Transaction};
-use dashmap::{DashMap, DashSet};
-use rusqlite::{Connection, Result};
-use uuid::Uuid;
+use {
+    crate::models::{Account, Transaction},
+    dashmap::{DashMap, DashSet},
+    rusqlite::{Connection, Result},
+    uuid::Uuid,
+};
 
 pub struct Persistence {
     conn: Connection,
@@ -95,7 +97,13 @@ impl Persistence {
         tx.commit()
     }
 
-    pub fn load_state(&self) -> Result<(DashMap<Uuid, Account>, DashMap<Uuid, Transaction>, DashSet<Uuid>)> {
+    pub fn load_state(
+        &self,
+    ) -> Result<(
+        DashMap<Uuid, Account>,
+        DashMap<Uuid, Transaction>,
+        DashSet<Uuid>,
+    )> {
         let mut stmt = self
             .conn
             .prepare("SELECT uuid, balance, keys, transaction_history FROM accounts")?;

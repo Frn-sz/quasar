@@ -3,6 +3,7 @@ pub mod interface;
 use {
     crate::{
         ledger::{error::LedgerError, interface::LedgerInterface},
+        metrics::ACCOUNTS_CREATED_TOTAL,
         models::{Account, Key},
     },
     dashmap::{DashMap, DashSet},
@@ -34,6 +35,7 @@ impl LedgerInterface for Ledger {
     fn create_account(&self, keys: Vec<Key>) -> Result<Uuid, LedgerError> {
         let (account_id, account) = Account::new(keys);
         self.accounts.insert(account_id, account);
+        ACCOUNTS_CREATED_TOTAL.inc();
         Ok(account_id)
     }
 

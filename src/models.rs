@@ -1,6 +1,6 @@
-use serde::{Deserialize, Serialize};
 use {
     chrono::{DateTime, Utc},
+    serde::{Deserialize, Serialize},
     uuid::Uuid,
 };
 
@@ -64,7 +64,6 @@ pub struct DepositInstruction {
 pub struct GetBalanceInstruction {
     pub account_id: Uuid,
 }
-
 
 /// Account is very simplified, since we don't really care about user data
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
