@@ -6,6 +6,7 @@ pub struct QuasarServerConfig {
     pub http: HttpConfig,
     pub metrics: MetricsConfig,
     pub debug: bool,
+    pub persistence: PersistenceConfig,
 }
 
 impl QuasarServerConfig {
@@ -55,4 +56,9 @@ pub struct HttpConfig {
 pub struct MetricsConfig {
     pub remote_write_url: String,
     pub push_interval_seconds: u64,
+}
+
+#[derive(Clone, Debug, serde::Deserialize)]
+pub struct PersistenceConfig {
+    pub db_path: String,
 }
