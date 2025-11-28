@@ -1,13 +1,12 @@
 debug = false
-tasks = 500
+tasks = 512
 create_chance = 10
 deposit_chance = 10
 
+[grpc]
+address = "0.0.0.0"
+port = 50051
 
 [http]
-address = ""
+address = "0.0.0.0"
 port = 8080
-
-[grpc]
-address = "127.0.0.1"
-port = 50051

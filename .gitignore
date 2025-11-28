@@ -2,3 +2,4 @@
 .idea
 .local
 logs
+quasar.db
